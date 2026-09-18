@@ -1,0 +1,13 @@
+name: aeroload
+
+channels:
+  - defaults
+
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - streamlit==1.64.0
+      - pandas==3.0.6
+      - plotly==7.1.0
+      - pytest==9.1.1

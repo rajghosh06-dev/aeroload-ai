@@ -86,3 +86,12 @@ class CargoBay:
 
         if self.row < 1:
             raise ValueError("Bay row must be at least 1.")
+
+@dataclass
+class CargoAssignment:
+    """
+    Represents the placement of one cargo item into one cargo bay.
+    """
+
+    cargo: CargoItem
+    bay: CargoBay

@@ -70,6 +70,23 @@ class Aircraft:
                 return bay
 
         return None
+    def require_bay(self, bay_id: str) -> CargoBay:
+        """
+        Return a cargo bay by ID.
+
+        Raises:
+            ValueError: If the requested bay does not exist.
+        """
+
+        bay = self.get_bay(bay_id)
+
+        if bay is None:
+            raise ValueError(
+                f"Cargo bay '{bay_id}' does not exist "
+                f"in aircraft '{self.aircraft_id}'."
+            )
+
+        return bay
 
 def load_aircraft_from_json(file_path: str | Path) -> Aircraft:
     """

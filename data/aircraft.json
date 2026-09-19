@@ -1,0 +1,77 @@
+{
+    "aircraft_id": "ALT-8",
+    "name": "AeroLoad Training Aircraft",
+    "max_payload_kg": 4000,
+    "cg_limits": {
+        "minimum_m": -1.0,
+        "maximum_m": 1.0,
+        "target_m": 0.0
+    },
+    "lateral_imbalance_limit_kg": 300,
+    "bays": [
+        {
+            "bay_id": "B1",
+            "max_weight_kg": 600,
+            "longitudinal_arm_m": -3.0,
+            "side": "Left",
+            "row": 1,
+            "adjacent_bays": ["B2", "B3"]
+        },
+        {
+            "bay_id": "B2",
+            "max_weight_kg": 600,
+            "longitudinal_arm_m": -3.0,
+            "side": "Right",
+            "row": 1,
+            "adjacent_bays": ["B1", "B4"]
+        },
+        {
+            "bay_id": "B3",
+            "max_weight_kg": 650,
+            "longitudinal_arm_m": -1.0,
+            "side": "Left",
+            "row": 2,
+            "adjacent_bays": ["B1", "B4", "B5"]
+        },
+        {
+            "bay_id": "B4",
+            "max_weight_kg": 650,
+            "longitudinal_arm_m": -1.0,
+            "side": "Right",
+            "row": 2,
+            "adjacent_bays": ["B2", "B3", "B6"]
+        },
+        {
+            "bay_id": "B5",
+            "max_weight_kg": 650,
+            "longitudinal_arm_m": 1.0,
+            "side": "Left",
+            "row": 3,
+            "adjacent_bays": ["B3", "B6", "B7"]
+        },
+        {
+            "bay_id": "B6",
+            "max_weight_kg": 650,
+            "longitudinal_arm_m": 1.0,
+            "side": "Right",
+            "row": 3,
+            "adjacent_bays": ["B4", "B5", "B8"]
+        },
+        {
+            "bay_id": "B7",
+            "max_weight_kg": 600,
+            "longitudinal_arm_m": 3.0,
+            "side": "Left",
+            "row": 4,
+            "adjacent_bays": ["B5", "B8"]
+        },
+        {
+            "bay_id": "B8",
+            "max_weight_kg": 600,
+            "longitudinal_arm_m": 3.0,
+            "side": "Right",
+            "row": 4,
+            "adjacent_bays": ["B6", "B7"]
+        }
+    ]
+}

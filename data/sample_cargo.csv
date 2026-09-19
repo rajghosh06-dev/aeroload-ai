@@ -1,0 +1,7 @@
+cargo_id,name,weight_kg,category,hazard_class,priority
+P1,General Equipment,420,General,None,1
+P2,Lithium Battery Shipment,300,Hazardous,Lithium Battery,2
+P3,Flammable Chemical Container,280,Hazardous,Flammable,2
+P4,Packaged Food Supplies,350,Food,Food,1
+P5,Medical Equipment,250,Fragile,None,2
+P6,Toxic Material Container,200,Hazardous,Toxic,3

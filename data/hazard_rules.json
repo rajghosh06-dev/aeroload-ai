@@ -1,0 +1,23 @@
+{
+    "description": "Simplified educational hazardous cargo compatibility rules for AeroLoad-AI.",
+    "disclaimer": "These rules are intended only for academic simulation and are not a substitute for official ICAO or IATA dangerous-goods regulations.",
+
+    "incompatible_pairs": [
+        [
+            "Lithium Battery",
+            "Flammable"
+        ],
+        [
+            "Flammable",
+            "Oxidizer"
+        ],
+        [
+            "Toxic",
+            "Food"
+        ],
+        [
+            "Biohazard",
+            "Food"
+        ]
+    ]
+}

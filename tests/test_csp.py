@@ -115,6 +115,7 @@ def test_lithium_and_flammable_can_be_separated():
         assignment,
     )
 
+
 def test_overweight_cargo_is_not_consistent():
     aircraft = load_aircraft_from_json(
         "data/aircraft.json"
@@ -142,6 +143,7 @@ def test_overweight_cargo_is_not_consistent():
         {},
     )
 
+
 def test_toxic_and_food_cannot_be_adjacent():
     csp = make_csp()
 
@@ -155,4 +157,40 @@ def test_toxic_and_food_cannot_be_adjacent():
         "P4",
         "B4",
         assignment,
+    )
+
+
+def test_pairwise_same_bay_is_invalid():
+    csp = make_csp()
+
+    assert not csp.are_pairwise_compatible(
+        "P1",
+        "B1",
+        "P2",
+        "B1",
+    )
+
+
+def test_pairwise_hazard_conflict_is_invalid():
+    csp = make_csp()
+
+    # P2 = Lithium Battery
+    # P3 = Flammable
+    # B3 and B4 are adjacent.
+    assert not csp.are_pairwise_compatible(
+        "P2",
+        "B3",
+        "P3",
+        "B4",
+    )
+
+
+def test_pairwise_separated_hazard_is_valid():
+    csp = make_csp()
+
+    assert csp.are_pairwise_compatible(
+        "P2",
+        "B1",
+        "P3",
+        "B8",
     )

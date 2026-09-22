@@ -29,7 +29,7 @@ def render_docs_page(on_close: Callable[[], None]) -> None:
         st.markdown("## Documentation & Academic Notes")
         st.caption("Select a topic below to read concise guidance without leaving the application.")
     with close_col:
-        if st.button("Back to dashboard", icon=":material/arrow_back:", use_container_width=True, type="primary"):
+        if st.button("Back to dashboard", icon=":material/arrow_back:", width="stretch", type="primary"):
             on_close()
             st.rerun()
 

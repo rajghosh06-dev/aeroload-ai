@@ -65,6 +65,32 @@ def load_project_data():
     )
 
 
+def _to_float(value: object, default: float = 0.0) -> float:
+    """Safely convert an arbitrary value to float with fallback."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
+def _to_int(value: object, default: int = 0) -> int:
+    """Safely convert an arbitrary value to int with fallback."""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip()))
+        except ValueError:
+            return default
+    return default
+
+
 def _initialize_state(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
     defaults = default_workspace_state(base_aircraft, sample_rows)
     for key, value in defaults.items():
@@ -77,12 +103,12 @@ def _apply_workspace_reset(base_aircraft: Aircraft, sample_rows: list[dict[str, 
     defaults = default_workspace_state(base_aircraft, sample_rows)
     for key, value in defaults.items():
         st.session_state[key] = value
-    st.session_state["manifest_revision"] = st.session_state.get("manifest_revision", 0) + 1
+    st.session_state["manifest_revision"] = _to_int(st.session_state.get("manifest_revision", 0), 0) + 1
     st.session_state.pop("analysis_result", None)
     st.session_state.pop("analysis_csp", None)
     st.session_state.pop("analysis_fingerprint", None)
     for k in list(st.session_state):
-        if k.startswith("scenario_draft") or k.startswith("draft_"):
+        if isinstance(k, str) and (k.startswith("scenario_draft") or k.startswith("draft_")):
             st.session_state.pop(k, None)
 
 
@@ -104,7 +130,7 @@ def _settings_panel(base_aircraft: Aircraft, sample_rows: list[dict[str, object]
     )
     st.caption("Cargo items and aircraft limits are edited from 'Edit Scenario', not Settings.")
     st.divider()
-    if st.button("Reset workspace", use_container_width=True, icon=":material/restart_alt:"):
+    if st.button("Reset workspace", width="stretch", icon=":material/restart_alt:"):
         st.session_state["pending_workspace_reset"] = True
         st.rerun()
 
@@ -113,11 +139,11 @@ def _configured_aircraft(base_aircraft: Aircraft) -> tuple[Aircraft, list[str]]:
     try:
         return configured_aircraft(
             base_aircraft,
-            max_payload_kg=st.session_state["max_payload_kg"],
-            cg_min_m=st.session_state["cg_min_m"],
-            cg_max_m=st.session_state["cg_max_m"],
-            target_cg_m=st.session_state["target_cg_m"],
-            lateral_imbalance_limit_kg=st.session_state["lateral_limit_kg"],
+            max_payload_kg=_to_float(st.session_state.get("max_payload_kg", base_aircraft.max_payload_kg), base_aircraft.max_payload_kg),
+            cg_min_m=_to_float(st.session_state.get("cg_min_m", base_aircraft.cg_min_m), base_aircraft.cg_min_m),
+            cg_max_m=_to_float(st.session_state.get("cg_max_m", base_aircraft.cg_max_m), base_aircraft.cg_max_m),
+            target_cg_m=_to_float(st.session_state.get("target_cg_m", base_aircraft.target_cg_m), base_aircraft.target_cg_m),
+            lateral_imbalance_limit_kg=_to_float(st.session_state.get("lateral_limit_kg", base_aircraft.lateral_imbalance_limit_kg), base_aircraft.lateral_imbalance_limit_kg),
         ), []
     except ValueError as error:
         return base_aircraft, [str(error)]
@@ -126,7 +152,7 @@ def _configured_aircraft(base_aircraft: Aircraft) -> tuple[Aircraft, list[str]]:
 def _open_scenario_editor() -> None:
     """Create an isolated draft so Cancel never mutates the active scenario."""
     st.session_state["scenario_draft_rows"] = normalise_rows(st.session_state["manifest_rows"])
-    st.session_state["scenario_draft_revision"] = st.session_state.get("scenario_draft_revision", 0) + 1
+    st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
     for active_key in ("max_payload_kg", "cg_min_m", "cg_max_m", "target_cg_m", "lateral_limit_kg"):
         st.session_state[f"draft_{active_key}"] = st.session_state[active_key]
     st.session_state["scenario_editor_open"] = True
@@ -135,7 +161,7 @@ def _open_scenario_editor() -> None:
 
 def _discard_scenario_draft() -> None:
     for key in list(st.session_state):
-        if key.startswith("scenario_draft") or key.startswith("draft_"):
+        if isinstance(key, str) and (key.startswith("scenario_draft") or key.startswith("draft_")):
             st.session_state.pop(key, None)
     st.session_state["scenario_editor_open"] = False
 
@@ -153,11 +179,11 @@ def _draft_aircraft(base_aircraft: Aircraft) -> tuple[Aircraft, list[str]]:
     try:
         return configured_aircraft(
             base_aircraft,
-            max_payload_kg=st.session_state["draft_max_payload_kg"],
-            cg_min_m=st.session_state["draft_cg_min_m"],
-            cg_max_m=st.session_state["draft_cg_max_m"],
-            target_cg_m=st.session_state["draft_target_cg_m"],
-            lateral_imbalance_limit_kg=st.session_state["draft_lateral_limit_kg"],
+            max_payload_kg=_to_float(st.session_state.get("draft_max_payload_kg", base_aircraft.max_payload_kg), base_aircraft.max_payload_kg),
+            cg_min_m=_to_float(st.session_state.get("draft_cg_min_m", base_aircraft.cg_min_m), base_aircraft.cg_min_m),
+            cg_max_m=_to_float(st.session_state.get("draft_cg_max_m", base_aircraft.cg_max_m), base_aircraft.cg_max_m),
+            target_cg_m=_to_float(st.session_state.get("draft_target_cg_m", base_aircraft.target_cg_m), base_aircraft.target_cg_m),
+            lateral_imbalance_limit_kg=_to_float(st.session_state.get("draft_lateral_limit_kg", base_aircraft.lateral_imbalance_limit_kg), base_aircraft.lateral_imbalance_limit_kg),
         ), []
     except ValueError as error:
         return base_aircraft, [str(error)]
@@ -170,7 +196,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
         st.markdown("## Edit Scenario Data")
         st.caption("Configure the cargo manifest and aircraft limits. Changes apply to the dashboard only after clicking 'Save changes'.")
     with close_col:
-        if st.button("Cancel & Return", icon=":material/arrow_back:", use_container_width=True):
+        if st.button("Cancel & Return", icon=":material/arrow_back:", width="stretch"):
             _discard_scenario_draft()
             st.rerun()
 
@@ -191,7 +217,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
 
         action_col1, action_col2, count_col = st.columns([1, 1, 2], vertical_alignment="center")
         with action_col1:
-            if st.button("Add cargo item", icon=":material/add:", type="primary", use_container_width=True):
+            if st.button("Add cargo item", icon=":material/add:", type="primary", width="stretch"):
                 new_rows = list(draft_rows)
                 new_rows.append({
                     "cargo_id": f"C{len(new_rows) + 1}",
@@ -202,26 +228,26 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                     "priority": 1,
                 })
                 st.session_state["scenario_draft_rows"] = new_rows
-                st.session_state["scenario_draft_revision"] += 1
+                st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
                 st.rerun()
 
         with action_col2:
-            with st.popover("Clear all cargo", icon=":material/delete_sweep:", use_container_width=True):
+            with st.popover("Clear all cargo", icon=":material/delete_sweep:", width="stretch"):
                 st.markdown("##### Clear manifest?")
                 st.caption("Remove all cargo items from this draft. This cannot be undone.")
-                if st.button("Yes, clear all cargo", type="primary", use_container_width=True, icon=":material/check:"):
+                if st.button("Yes, clear all cargo", type="primary", width="stretch", icon=":material/check:"):
                     st.session_state["scenario_draft_rows"] = empty_manifest_rows()
-                    st.session_state["scenario_draft_revision"] += 1
+                    st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
                     st.rerun()
 
         with count_col:
-            total_draft_wt = sum(float(r.get("weight_kg", 0) or 0) for r in draft_rows)
+            total_draft_wt = sum(_to_float(r.get("weight_kg", 0.0)) for r in draft_rows)
             st.caption(f"**Manifest Summary**: {len(draft_rows)} items · {total_draft_wt:,.0f} kg total weight")
 
         if draft_rows:
             st.dataframe(
                 pd.DataFrame(draft_rows, columns=MANIFEST_COLUMNS),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "cargo_id": st.column_config.TextColumn("Cargo ID", width="small"),
@@ -236,7 +262,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
             # Clean edit form for an item
             with st.expander("✏️ Edit or Remove an Item", expanded=False):
                 labels = [
-                    f"{index + 1:02d} | {row['cargo_id']} - {row['name']} ({row['weight_kg']:.0f} kg, {row['hazard_class']})"
+                    f"{index + 1:02d} | {row['cargo_id']} - {row['name']} ({_to_float(row.get('weight_kg', 0.0)):.0f} kg, {row['hazard_class']})"
                     for index, row in enumerate(draft_rows)
                 ]
                 selected_index = st.selectbox(
@@ -252,9 +278,9 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                     c_name = c2.text_input("Name", value=str(row["name"]))
 
                     w1, p1 = st.columns(2)
-                    c_weight = w1.number_input("Weight (kg)", min_value=0.01, value=float(row["weight_kg"]), step=10.0)
+                    c_weight = w1.number_input("Weight (kg)", min_value=0.01, value=_to_float(row.get("weight_kg", 100.0), default=100.0), step=10.0)
                     priority_options = list(range(1, 6))
-                    cur_p = int(float(row["priority"])) if str(row["priority"]).strip() else 1
+                    cur_p = _to_int(row.get("priority", 1), default=1)
                     c_priority = p1.selectbox(
                         "Priority (1 = standard, 5 = urgent)",
                         priority_options,
@@ -275,28 +301,27 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                         index=haz_options.index(str(row["hazard_class"])) if str(row["hazard_class"]) in haz_options else 0,
                     )
 
-                    apply_clicked = st.form_submit_button("Save changes to item", type="primary", icon=":material/check:", use_container_width=True)
+                    apply_clicked = st.form_submit_button("Save changes to item", type="primary", icon=":material/check:", width="stretch")
 
                 del_col, _ = st.columns([1, 1])
-                remove_clicked = del_col.button("Delete this item", icon=":material/delete:", use_container_width=True, help="Remove this cargo item from the manifest")
+                remove_clicked = del_col.button("Delete this item", icon=":material/delete:", width="stretch", help="Remove this cargo item from the manifest")
 
                 if remove_clicked:
                     draft_rows.pop(selected_index)
                     st.session_state["scenario_draft_rows"] = draft_rows
-                    st.session_state["scenario_draft_revision"] += 1
-                    st.rerun()
+                    st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
                     st.rerun()
                 if apply_clicked:
                     draft_rows[selected_index] = {
-                        "cargo_id": c_id,
-                        "name": c_name,
-                        "weight_kg": c_weight,
-                        "category": c_cat,
-                        "hazard_class": c_haz,
-                        "priority": c_priority,
+                        "cargo_id": str(c_id).strip(),
+                        "name": str(c_name).strip(),
+                        "weight_kg": _to_float(c_weight, default=100.0),
+                        "category": str(c_cat),
+                        "hazard_class": str(c_haz),
+                        "priority": _to_int(c_priority, default=1),
                     }
                     st.session_state["scenario_draft_rows"] = draft_rows
-                    st.session_state["scenario_draft_revision"] += 1
+                    st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
                     st.rerun()
         else:
             st.info("No cargo has been added yet. Click 'Add cargo item' or import a CSV to begin.")
@@ -329,7 +354,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                  "Max Capacity (kg)": b.max_weight_kg, "Adjacent Bays": ", ".join(b.adjacent_bays)}
                 for b in base_aircraft.bays
             ]
-            st.dataframe(pd.DataFrame(bay_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(bay_data), width="stretch", hide_index=True)
 
     # -------------------------------------------------------------------------
     # TAB 3: IMPORT & TEMPLATES
@@ -348,9 +373,9 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
         )
         t_desc_col, t_apply_col = st.columns([3.5, 1.5], vertical_alignment="center")
         t_desc_col.caption(templates[selected_template]["description"])
-        if t_apply_col.button("Apply this template", icon=":material/content_copy:", use_container_width=True, type="primary"):
+        if t_apply_col.button("Apply this template", icon=":material/content_copy:", width="stretch", type="primary"):
             st.session_state["scenario_draft_rows"] = normalise_rows(templates[selected_template]["rows"])
-            st.session_state["scenario_draft_revision"] += 1
+            st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
             st.rerun()
 
         st.divider()
@@ -364,9 +389,9 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                 if upload_errors:
                     for error in upload_errors:
                         st.error(error)
-                elif st.button("Load uploaded CSV into draft", type="primary", use_container_width=True):
+                elif st.button("Load uploaded CSV into draft", type="primary", width="stretch"):
                     st.session_state["scenario_draft_rows"] = rows
-                    st.session_state["scenario_draft_revision"] += 1
+                    st.session_state["scenario_draft_revision"] = _to_int(st.session_state.get("scenario_draft_revision", 0), 0) + 1
                     st.rerun()
 
         with csv_col2:
@@ -377,7 +402,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
                 manifest_csv(st.session_state["scenario_draft_rows"]),
                 "aeroload_scenario_draft.csv",
                 "text/csv",
-                use_container_width=True,
+                width="stretch",
                 icon=":material/download:",
             )
 
@@ -401,13 +426,13 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
     with st.container(key="scenario_actions"):
         summary_col, cancel_col, save_col = st.columns([3, 1, 1])
         summary_col.caption("Draft changes stay isolated until saved. Cancel restores the active scenario.")
-        if cancel_col.button("Cancel", use_container_width=True, icon=":material/close:"):
+        if cancel_col.button("Cancel", width="stretch", icon=":material/close:"):
             _discard_scenario_draft()
             st.rerun()
-        if save_col.button("Save changes", type="primary", use_container_width=True,
+        if save_col.button("Save changes", type="primary", width="stretch",
                            icon=":material/check:", disabled=bool(errors)):
             st.session_state["manifest_rows"] = normalise_rows(st.session_state["scenario_draft_rows"])
-            st.session_state["manifest_revision"] += 1
+            st.session_state["manifest_revision"] = _to_int(st.session_state.get("manifest_revision", 0), 0) + 1
             for active_key in ("max_payload_kg", "cg_min_m", "cg_max_m", "target_cg_m", "lateral_limit_kg"):
                 st.session_state[active_key] = st.session_state[f"draft_{active_key}"]
             # Reconcile manual assignments with newly saved cargo
@@ -471,17 +496,17 @@ def run_dashboard() -> None:
         with aircraft_col:
             render_aircraft_status(aircraft.name, aircraft.aircraft_id, len(aircraft.bays))
         with scenario_col:
-            if st.button("Edit Scenario", icon=":material/edit_note:", use_container_width=True,
+            if st.button("Edit Scenario", icon=":material/edit_note:", width="stretch",
                          key="open_scenario_data"):
                 _open_scenario_editor()
                 st.rerun()
         with docs_col:
-            if st.button("Help / Docs", icon=":material/help_outline:", use_container_width=True,
+            if st.button("Help / Docs", icon=":material/help_outline:", width="stretch",
                          key="open_docs"):
                 _open_docs()
                 st.rerun()
         with settings_col:
-            with st.popover("Settings", icon=":material/settings:", use_container_width=True):
+            with st.popover("Settings", icon=":material/settings:", width="stretch"):
                 _settings_panel(base_aircraft, sample_rows)
 
     if st.session_state["scenario_editor_open"]:
@@ -621,7 +646,7 @@ def run_dashboard() -> None:
                     run_solver = st.button(
                         "Run AeroLoad-AI",
                         type="primary",
-                        use_container_width=True,
+                        width="stretch",
                         disabled=bool(all_errors) or not cargo_items,
                         icon=":material/flight_takeoff:",
                     )
@@ -634,8 +659,8 @@ def run_dashboard() -> None:
                     with st.spinner("Solving placement, validating safety and evaluating balance..."):
                         current_result = analyze_loading_problem(
                             current_csp,
-                            optimize=st.session_state["enable_optimization"],
-                            max_optimization_iterations=int(st.session_state["optimization_iterations"]),
+                            optimize=bool(st.session_state.get("enable_optimization", True)),
+                            max_optimization_iterations=_to_int(st.session_state.get("optimization_iterations", 50), default=50),
                         )
                     st.session_state["analysis_result"] = current_result
                     st.session_state["analysis_csp"] = current_csp
@@ -676,7 +701,7 @@ def run_dashboard() -> None:
                             initial_m=initial_cg,
                             final_m=final_cg,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
                     lateral_col.plotly_chart(
@@ -685,7 +710,7 @@ def run_dashboard() -> None:
                             right_kg=right_kg,
                             limit_kg=aircraft.lateral_imbalance_limit_kg,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
 
@@ -697,7 +722,7 @@ def run_dashboard() -> None:
                     )
                     with load_tab:
                         st.markdown("#### Aircraft Bay Assignments")
-                        st.dataframe(assignment_frame, use_container_width=True, hide_index=True)
+                        st.dataframe(assignment_frame, width="stretch", hide_index=True)
                         st.download_button(
                             "Export load plan CSV",
                             assignment_frame.to_csv(index=False).encode("utf-8"),
@@ -779,7 +804,7 @@ def run_dashboard() -> None:
                             format_func=lambda i: cargo_labels[i],
                             key="manual_cargo_select",
                         )
-                        selected_cargo = cargo_items[selected_idx]
+                        selected_cargo = cargo_items[int(selected_idx)] if selected_idx is not None else cargo_items[0]
 
                         bay_options_list = [b.bay_id for b in aircraft.bays]
                         current_bay = manual_assignments.get(selected_cargo.cargo_id)
@@ -787,20 +812,20 @@ def run_dashboard() -> None:
                         target_bay = st.selectbox("Target bay", bay_options_list, index=default_bay_idx, key="manual_bay_select")
 
                         assign_col, unassign_col = st.columns(2)
-                        if assign_col.button("Place cargo", type="primary", use_container_width=True, icon=":material/done:"):
+                        if assign_col.button("Place cargo", type="primary", width="stretch", icon=":material/done:"):
                             st.session_state["manual_assignments"] = assign_cargo_manually(
                                 manual_assignments, selected_cargo.cargo_id, target_bay
                             )
                             st.rerun()
 
-                        if unassign_col.button("Remove", use_container_width=True, icon=":material/close:",
+                        if unassign_col.button("Remove", width="stretch", icon=":material/close:",
                                                disabled=selected_cargo.cargo_id not in manual_assignments):
                             st.session_state["manual_assignments"] = unassign_cargo_manually(
                                 manual_assignments, selected_cargo.cargo_id
                             )
                             st.rerun()
 
-                        if st.button("Reset all placements", use_container_width=True, icon=":material/refresh:"):
+                        if st.button("Reset all placements", width="stretch", icon=":material/refresh:"):
                             st.session_state["manual_assignments"] = clear_manual_assignments()
                             st.rerun()
                     else:
@@ -844,7 +869,7 @@ def run_dashboard() -> None:
                             initial_m=None,
                             final_m=manual_status.safety_report.cg_m,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
                     lateral_col.plotly_chart(
@@ -853,7 +878,7 @@ def run_dashboard() -> None:
                             right_kg=right_kg,
                             limit_kg=aircraft.lateral_imbalance_limit_kg,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
             else:
@@ -882,7 +907,7 @@ def run_dashboard() -> None:
                     format_func=lambda i: cargo_labels[i],
                     key="ai_assisted_cargo_select",
                 )
-                selected_cargo = cargo_items[selected_idx]
+                selected_cargo = cargo_items[int(selected_idx)] if selected_idx is not None else cargo_items[0]
                 domain_analysis = evaluate_bay_options(current_csp, selected_cargo.cargo_id, manual_assignments)
             else:
                 selected_cargo = None
@@ -910,7 +935,7 @@ def run_dashboard() -> None:
                             btn_cols = st.columns(min(len(domain_analysis.legal_bays), 4))
                             for i, b_id in enumerate(domain_analysis.legal_bays):
                                 col = btn_cols[i % len(btn_cols)]
-                                if col.button(f"Place {b_id}", key=f"place_btn_{b_id}", type="primary", use_container_width=True):
+                                if col.button(f"Place {b_id}", key=f"place_btn_{b_id}", type="primary", width="stretch"):
                                     st.session_state["manual_assignments"] = assign_cargo_manually(
                                         manual_assignments, selected_cargo.cargo_id, b_id
                                     )
@@ -919,14 +944,14 @@ def run_dashboard() -> None:
                             st.warning("No legal bays exist for this cargo under current placements.")
 
                         un_col, reset_col = st.columns(2)
-                        if un_col.button("Remove from bay", use_container_width=True, icon=":material/close:",
+                        if un_col.button("Remove from bay", width="stretch", icon=":material/close:",
                                          disabled=selected_cargo.cargo_id not in manual_assignments):
                             st.session_state["manual_assignments"] = unassign_cargo_manually(
                                 manual_assignments, selected_cargo.cargo_id
                             )
                             st.rerun()
 
-                        if reset_col.button("Reset all", use_container_width=True, icon=":material/refresh:"):
+                        if reset_col.button("Reset all", width="stretch", icon=":material/refresh:"):
                             st.session_state["manual_assignments"] = clear_manual_assignments()
                             st.rerun()
 
@@ -976,7 +1001,7 @@ def run_dashboard() -> None:
                             initial_m=None,
                             final_m=manual_status.safety_report.cg_m,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
                     lateral_col.plotly_chart(
@@ -985,7 +1010,7 @@ def run_dashboard() -> None:
                             right_kg=right_kg,
                             limit_kg=aircraft.lateral_imbalance_limit_kg,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                         config={"displayModeBar": False},
                     )
             else:
@@ -1001,11 +1026,11 @@ def _render_manifest_tab() -> None:
     with title_col:
         st.markdown("### Active cargo manifest")
     with edit_col:
-        if st.button("Edit scenario data", icon=":material/edit:", use_container_width=True):
+        if st.button("Edit scenario data", icon=":material/edit:", width="stretch"):
             _open_scenario_editor()
             st.rerun()
     st.dataframe(pd.DataFrame(normalise_rows(st.session_state["manifest_rows"])),
-                 use_container_width=True, hide_index=True)
+                 width="stretch", hide_index=True)
     st.download_button("Export manifest CSV", manifest_csv(st.session_state["manifest_rows"]),
                        "aeroload_manifest.csv", "text/csv")
 

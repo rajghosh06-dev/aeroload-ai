@@ -35,6 +35,7 @@ setuptools==83.0.0
 six==1.17.0
 starlette==1.6.0
 streamlit==1.64.0
+streamlit-sortables==0.3.1
 toml==0.10.2
 typing_extensions==4.16.0
 tzdata==2026.4

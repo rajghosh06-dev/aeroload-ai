@@ -1,18 +1,6 @@
-import streamlit as st
+"""AeroLoad-AI Streamlit entry point."""
 
-st.set_page_config(page_title="AeroLoad AI",
-                   page_icon=" _:_ ",
-                   layout="wide",
-                   initial_sidebar_state="expanded"
-                   )
+from ui.dashboard import run_dashboard
 
-st.title(" AeroLoad AI")
-st.subheader("Aircraft Cargo Weight and Balance & Hazmat Placement Engine")
-st.write(
-    "An intelligent constraint-based aircraft cargo planning"
-    "and safety analysis system."
-)
-st.success(
-    "AeroLoad AI development environment is configured successfully"
-)
-st.caption("Project Status: Phase 0 - Foundation Setup")
+
+run_dashboard()

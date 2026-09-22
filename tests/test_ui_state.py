@@ -45,3 +45,35 @@ def test_reorder_rows_uses_drag_order_without_changing_values():
     reordered = reorder_rows(rows, ["02 | P2 - Two", "01 | P1 - One"])
     assert [row["cargo_id"] for row in reordered] == ["P2", "P1"]
     assert reordered[0]["weight_kg"] == 120
+
+
+def test_empty_manifest_rows_returns_empty_list():
+    from ui.state import empty_manifest_rows
+    assert empty_manifest_rows() == []
+
+
+def test_default_workspace_state_returns_pristine_defaults():
+    from ui.state import default_workspace_state
+    base = load_aircraft_from_json("data/aircraft.json")
+    sample_rows = [
+        {"cargo_id": "P1", "name": "One", "weight_kg": 100, "category": "General", "hazard_class": "None", "priority": 1}
+    ]
+    defaults = default_workspace_state(base, sample_rows)
+    assert defaults["planning_mode"] == "Auto Solve"
+    assert defaults["enable_optimization"] is True
+    assert defaults["optimization_iterations"] == 50
+    assert defaults["max_payload_kg"] == base.max_payload_kg
+    assert defaults["cg_min_m"] == base.cg_min_m
+    assert defaults["cg_max_m"] == base.cg_max_m
+    assert defaults["target_cg_m"] == base.target_cg_m
+    assert defaults["lateral_limit_kg"] == base.lateral_imbalance_limit_kg
+    assert defaults["scenario_editor_open"] is False
+    assert defaults["docs_open"] is False
+    assert defaults["manual_assignments"] == {}
+    assert defaults["show_technical_details"] is False
+    assert len(defaults["manifest_rows"]) == 1
+
+    # Verify mutating the returned dict's manifest does not mutate sample_rows
+    defaults["manifest_rows"][0]["weight_kg"] = 999
+    assert sample_rows[0]["weight_kg"] == 100
+

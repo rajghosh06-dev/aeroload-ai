@@ -119,3 +119,24 @@ def configured_aircraft(base: Aircraft, *, max_payload_kg: float, cg_min_m: floa
     return replace(base, max_payload_kg=float(max_payload_kg), cg_min_m=float(cg_min_m),
                    cg_max_m=float(cg_max_m), target_cg_m=float(target_cg_m),
                    lateral_imbalance_limit_kg=float(lateral_imbalance_limit_kg))
+
+
+def default_workspace_state(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> dict[str, object]:
+    """Return the pristine default session state values for the workspace."""
+    return {
+        "manifest_rows": [dict(r) for r in sample_rows],
+        "manifest_revision": 0,
+        "enable_optimization": True,
+        "optimization_iterations": 50,
+        "max_payload_kg": base_aircraft.max_payload_kg,
+        "cg_min_m": base_aircraft.cg_min_m,
+        "cg_max_m": base_aircraft.cg_max_m,
+        "target_cg_m": base_aircraft.target_cg_m,
+        "lateral_limit_kg": base_aircraft.lateral_imbalance_limit_kg,
+        "scenario_editor_open": False,
+        "docs_open": False,
+        "planning_mode": "Auto Solve",
+        "manual_assignments": {},
+        "selected_manual_cargo_idx": 0,
+        "show_technical_details": False,
+    }

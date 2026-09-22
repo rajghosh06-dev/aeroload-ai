@@ -59,8 +59,17 @@ def get_global_css() -> str:
     .st-key-docs_content{padding:1rem;background:#0d1929}
     .pipeline-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem;margin:1rem 0}
     .pipeline-step{padding:1rem;border-top:2px solid #38bdf8;background:#101e30;border-radius:8px}
-    .pipeline-step small{color:#7dd3fc}.pipeline-step h4{font-size:1rem;margin:.5rem 0}.pipeline-step p{color:#a8b5c8;font-size:.85rem;margin:0}
-    @media(max-width:850px){.pipeline-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.st-key-app_header [data-testid='stHorizontalBlock']{flex-wrap:wrap}.st-key-scenario_scroll{height:calc(100dvh - 340px)!important}.header-aircraft{border:0}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:550px){.pipeline-grid{grid-template-columns:1fr}.st-key-scenario_actions [data-testid='stColumn']:first-child{display:none}.st-key-scenario_actions [data-testid='stHorizontalBlock']{flex-wrap:nowrap}.st-key-scenario_actions [data-testid='stColumn']{min-width:0!important;flex:1}.st-key-scenario_scroll{height:55dvh!important}.kpi-tile>strong{font-size:1.25rem}}
+    .workflow-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0d1826;border:1px solid #1e314b;border-radius:12px;padding:9px 18px;margin:10px 0 16px}
+    .workflow-step{display:flex;align-items:center;gap:7px;font-size:.83rem}
+    .step-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:.72rem;font-weight:700}
+    .step-pending .step-badge{background:#162335;color:#64748b;border:1px solid #273e5a}
+    .step-pending .step-label{color:#64748b}
+    .step-active .step-badge{background:#0284c7;color:#fff;box-shadow:0 0 10px rgba(2,132,199,.45)}
+    .step-active .step-label{color:#38bdf8;font-weight:700}
+    .step-completed .step-badge{background:#10b981;color:#fff}
+    .step-completed .step-label{color:#a7f3d0}
+    .workflow-arrow{color:#273e5a;font-size:.85rem}
+    @media(max-width:850px){.pipeline-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.st-key-app_header [data-testid='stHorizontalBlock']{flex-wrap:wrap}.st-key-scenario_scroll{height:calc(100dvh - 340px)!important}.header-aircraft{border:0}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflow-bar{flex-wrap:wrap;gap:6px}}
+    @media(max-width:550px){.pipeline-grid{grid-template-columns:1fr}.st-key-scenario_actions [data-testid='stColumn']:first-child{display:none}.st-key-scenario_actions [data-testid='stHorizontalBlock']{flex-wrap:nowrap}.st-key-scenario_actions [data-testid='stColumn']{min-width:0!important;flex:1}.st-key-scenario_scroll{height:55dvh!important}.kpi-tile>strong{font-size:1.25rem}.workflow-step{font-size:.75rem}}
     </style>
     """

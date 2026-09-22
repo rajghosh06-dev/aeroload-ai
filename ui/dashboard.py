@@ -22,7 +22,13 @@ from engine.models import CargoCategory, HazardClass
 from engine.pipeline import analyze_loading_problem
 from ui.aircraft_view import render_aircraft_layout
 from ui.charts import cg_envelope_figure, lateral_balance_figure
-from ui.components import render_aircraft_status, render_brand, render_kpi_strip, render_status_pill
+from ui.components import (
+    render_aircraft_status,
+    render_brand,
+    render_kpi_strip,
+    render_status_pill,
+    render_workflow_indicator,
+)
 from ui.docs import render_docs_page
 from ui.planning import (
     BayOptionStatus,
@@ -37,6 +43,7 @@ from ui.state import (
     MANIFEST_COLUMNS,
     cargo_rows,
     configured_aircraft,
+    default_workspace_state,
     empty_manifest_rows,
     import_manifest,
     manifest_csv,
@@ -59,54 +66,46 @@ def load_project_data():
 
 
 def _initialize_state(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
-    defaults = {
-        "manifest_rows": sample_rows,
-        "manifest_revision": 0,
-        "enable_optimization": True,
-        "optimization_iterations": 50,
-        "max_payload_kg": base_aircraft.max_payload_kg,
-        "cg_min_m": base_aircraft.cg_min_m,
-        "cg_max_m": base_aircraft.cg_max_m,
-        "target_cg_m": base_aircraft.target_cg_m,
-        "lateral_limit_kg": base_aircraft.lateral_imbalance_limit_kg,
-        "scenario_editor_open": False,
-        "docs_open": False,
-        "planning_mode": "Auto Solve",
-        "manual_assignments": {},
-        "selected_manual_cargo_idx": 0,
-    }
+    defaults = default_workspace_state(base_aircraft, sample_rows)
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
-def _reset_workspace(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
-    st.session_state["manifest_rows"] = sample_rows
-    st.session_state["manifest_revision"] += 1
-    st.session_state["enable_optimization"] = True
-    st.session_state["optimization_iterations"] = 50
-    st.session_state["max_payload_kg"] = base_aircraft.max_payload_kg
-    st.session_state["cg_min_m"] = base_aircraft.cg_min_m
-    st.session_state["cg_max_m"] = base_aircraft.cg_max_m
-    st.session_state["target_cg_m"] = base_aircraft.target_cg_m
-    st.session_state["lateral_limit_kg"] = base_aircraft.lateral_imbalance_limit_kg
-    st.session_state["planning_mode"] = "Auto Solve"
-    st.session_state["manual_assignments"] = {}
-    st.session_state["selected_manual_cargo_idx"] = 0
+def _apply_workspace_reset(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
+    """Restore the pristine default session state values before any widgets render."""
+    defaults = default_workspace_state(base_aircraft, sample_rows)
+    for key, value in defaults.items():
+        st.session_state[key] = value
+    st.session_state["manifest_revision"] = st.session_state.get("manifest_revision", 0) + 1
     st.session_state.pop("analysis_result", None)
     st.session_state.pop("analysis_csp", None)
     st.session_state.pop("analysis_fingerprint", None)
+    for k in list(st.session_state):
+        if k.startswith("scenario_draft") or k.startswith("draft_"):
+            st.session_state.pop(k, None)
 
 
 def _settings_panel(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
     st.markdown("#### Solver preferences")
     st.toggle("Enable local-search optimization", key="enable_optimization")
-    st.number_input("Maximum optimization iterations", min_value=1, max_value=500,
-                    step=5, key="optimization_iterations")
-    st.caption("Scenario cargo and aircraft limits are edited from Scenario Data, not Settings.")
+    st.number_input(
+        "Maximum optimization iterations",
+        min_value=1,
+        max_value=500,
+        step=5,
+        key="optimization_iterations",
+    )
+    st.markdown("#### Interface")
+    st.toggle(
+        "Show technical AI details",
+        key="show_technical_details",
+        help="Expose formal CSP notation, detailed domain formulas, and algorithm audit stats across all views.",
+    )
+    st.caption("Cargo items and aircraft limits are edited from 'Edit Scenario', not Settings.")
     st.divider()
-    if st.button("Reset workspace", use_container_width=True):
-        _reset_workspace(base_aircraft, sample_rows)
+    if st.button("Reset workspace", use_container_width=True, icon=":material/restart_alt:"):
+        st.session_state["pending_workspace_reset"] = True
         st.rerun()
 
 
@@ -165,190 +164,239 @@ def _draft_aircraft(base_aircraft: Aircraft) -> tuple[Aircraft, list[str]]:
 
 
 def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, object]]) -> None:
-    """Render a separate transactional editor with template, Save and Cancel semantics."""
-    st.markdown("## Scenario Data")
-    st.caption("Build an aircraft scenario here. The dashboard changes only after Save changes.")
-
-    templates = scenario_templates(sample_rows)
-    with st.container(border=True, key="template_gallery"):
-        st.markdown("#### Start from a scenario template")
-        selected_template = st.radio(
-            "Scenario template",
-            list(templates),
-            horizontal=True,
-            key="selected_scenario_template",
-        )
-        template_detail, apply_col = st.columns([4, 1], vertical_alignment="center")
-        template_detail.caption(templates[selected_template]["description"])
-        if apply_col.button("Use template", icon=":material/content_copy:", use_container_width=True):
-            st.session_state["scenario_draft_rows"] = normalise_rows(templates[selected_template]["rows"])
-            st.session_state["scenario_draft_revision"] += 1
+    """Render a 3-tab transactional scenario editor with Save and Cancel semantics."""
+    header_col, close_col = st.columns([4, 1], vertical_alignment="center")
+    with header_col:
+        st.markdown("## Edit Scenario Data")
+        st.caption("Configure the cargo manifest and aircraft limits. Changes apply to the dashboard only after clicking 'Save changes'.")
+    with close_col:
+        if st.button("Cancel & Return", icon=":material/arrow_back:", use_container_width=True):
+            _discard_scenario_draft()
             st.rerun()
 
-    aircraft_tab, cargo_tab = st.tabs(["Aircraft limits", "Cargo manifest"])
-    with aircraft_tab:
-        st.markdown("### Aircraft operating envelope")
-        st.caption("Bay topology, arms and adjacency remain fixed by the ALT-8 aircraft template.")
-        first, second, third = st.columns(3)
-        first.number_input("Maximum payload (kg)", min_value=1.0, step=100.0, key="draft_max_payload_kg")
-        second.number_input("Target CG (m)", step=0.1, format="%.2f", key="draft_target_cg_m")
-        third.number_input("Lateral imbalance limit (kg)", min_value=0.0, step=25.0,
-                           key="draft_lateral_limit_kg")
-        cg_min_col, cg_max_col = st.columns(2)
-        cg_min_col.number_input("CG minimum (m)", step=0.1, format="%.2f", key="draft_cg_min_m")
-        cg_max_col.number_input("CG maximum (m)", step=0.1, format="%.2f", key="draft_cg_max_m")
+    manifest_tab, limits_tab, templates_tab = st.tabs([
+        "1. Cargo Manifest",
+        "2. Aircraft Limits",
+        "3. Import & Templates",
+    ])
 
-    with cargo_tab:
-        st.markdown("### Cargo manifest builder")
-        st.caption("Drag cards to set processing order, then select a cargo item and edit it with constrained controls.")
-        cargo_actions, clear_actions, import_actions, export_actions = st.columns([1, 1, 1, 1])
-        if cargo_actions.button("Add cargo", icon=":material/add:", use_container_width=True):
-            rows = normalise_rows(st.session_state["scenario_draft_rows"])
-            rows.append({"cargo_id": f"C{len(rows) + 1}", "name": "New cargo", "weight_kg": 100.0,
-                         "category": "General", "hazard_class": "None", "priority": 1})
-            st.session_state["scenario_draft_rows"] = rows
-            st.session_state["scenario_draft_revision"] += 1
-            st.rerun()
+    draft_rows = normalise_rows(st.session_state["scenario_draft_rows"])
 
-        with clear_actions.popover("Clear all", icon=":material/delete_sweep:", use_container_width=True):
-            st.markdown("##### Clear manifest?")
-            st.caption("Remove all cargo items from the draft manifest. This cannot be undone.")
-            if st.button("Yes, clear all cargo", type="primary", use_container_width=True, icon=":material/check:"):
-                st.session_state["scenario_draft_rows"] = empty_manifest_rows()
+    # -------------------------------------------------------------------------
+    # TAB 1: CARGO MANIFEST
+    # -------------------------------------------------------------------------
+    with manifest_tab:
+        st.markdown("### Cargo Manifest")
+        st.caption("Manage cargo packages to be loaded onto the aircraft.")
+
+        action_col1, action_col2, count_col = st.columns([1, 1, 2], vertical_alignment="center")
+        with action_col1:
+            if st.button("Add cargo item", icon=":material/add:", type="primary", use_container_width=True):
+                new_rows = list(draft_rows)
+                new_rows.append({
+                    "cargo_id": f"C{len(new_rows) + 1}",
+                    "name": "New cargo",
+                    "weight_kg": 100.0,
+                    "category": "General",
+                    "hazard_class": "None",
+                    "priority": 1,
+                })
+                st.session_state["scenario_draft_rows"] = new_rows
                 st.session_state["scenario_draft_revision"] += 1
                 st.rerun()
 
-        with import_actions.popover("Import CSV", icon=":material/upload:", use_container_width=True):
-            uploaded = st.file_uploader("Choose a manifest", type=["csv"])
-            if uploaded is not None:
-                rows, upload_errors = import_manifest(uploaded)
-                if upload_errors:
-                    for error in upload_errors:
-                        st.error(error)
-                elif st.button("Use imported CSV", type="primary", use_container_width=True):
-                    st.session_state["scenario_draft_rows"] = rows
+        with action_col2:
+            with st.popover("Clear all cargo", icon=":material/delete_sweep:", use_container_width=True):
+                st.markdown("##### Clear manifest?")
+                st.caption("Remove all cargo items from this draft. This cannot be undone.")
+                if st.button("Yes, clear all cargo", type="primary", use_container_width=True, icon=":material/check:"):
+                    st.session_state["scenario_draft_rows"] = empty_manifest_rows()
                     st.session_state["scenario_draft_revision"] += 1
                     st.rerun()
 
-        export_actions.download_button(
-            "Export draft CSV", manifest_csv(st.session_state["scenario_draft_rows"]),
-            "aeroload_scenario_draft.csv", "text/csv", use_container_width=True,
-        )
+        with count_col:
+            total_draft_wt = sum(float(r.get("weight_kg", 0) or 0) for r in draft_rows)
+            st.caption(f"**Manifest Summary**: {len(draft_rows)} items · {total_draft_wt:,.0f} kg total weight")
 
-        draft_rows = normalise_rows(st.session_state["scenario_draft_rows"])
         if draft_rows:
-            order_col, editor_col = st.columns([1, 2], gap="large")
-            labels = [
-                f"{index + 1:02d} | {row['cargo_id']} - {row['name']}"
-                for index, row in enumerate(draft_rows)
-            ]
-            with order_col:
-                st.markdown("#### Loading order")
-                st.caption("Drag a card to reorder the manifest.")
-                if sort_items is not None:
-                    ordered_labels = sort_items(
-                        labels,
-                        direction="vertical",
-                        key=f"cargo_order_{st.session_state['scenario_draft_revision']}",
-                        custom_style="""
-                        .sortable-component {background: transparent; padding: 0;}
-                        .sortable-item {background: #142238; color: #e5e7eb; border: 1px solid #263244;
-                            border-radius: 10px; margin: 7px 0; padding: 12px 14px; cursor: grab;}
-                        .sortable-item:hover {background: #19304d; color: #f8fafc;}
-                        """,
-                    )
-                    if ordered_labels != labels:
-                        st.session_state["scenario_draft_rows"] = reorder_rows(draft_rows, ordered_labels)
-                        st.session_state["scenario_draft_revision"] += 1
-                        st.rerun()
-                else:
-                    st.warning("Install project dependencies to enable drag-and-drop ordering.")
-                    st.dataframe(pd.DataFrame(draft_rows)[["cargo_id", "name"]], hide_index=True)
-
-            with editor_col:
-                st.markdown("#### Cargo details")
-                selected_index = st.selectbox(
-                    "Cargo item",
-                    range(len(draft_rows)),
-                    format_func=lambda index: labels[index],
-                    key=f"selected_cargo_{st.session_state['scenario_draft_revision']}",
-                )
-                row = draft_rows[selected_index]
-                with st.form(f"cargo_form_{st.session_state['scenario_draft_revision']}_{selected_index}"):
-                    identity_col, name_col = st.columns([1, 2])
-                    cargo_id = identity_col.text_input("Cargo ID", value=str(row["cargo_id"]))
-                    name = name_col.text_input("Name", value=str(row["name"]))
-                    weight_col, priority_col = st.columns(2)
-                    weight = weight_col.number_input("Weight (kg)", min_value=0.01, value=float(row["weight_kg"]), step=10.0)
-                    priority_options = list(range(1, 6))
-                    current_priority = int(float(row["priority"])) if str(row["priority"]).strip() else 1
-                    priority = priority_col.selectbox(
-                        "Priority",
-                        priority_options,
-                        index=priority_options.index(current_priority) if current_priority in priority_options else 0,
-                    )
-                    category_col, hazard_col = st.columns(2)
-                    category_options = [item.value for item in CargoCategory]
-                    hazard_options = [item.value for item in HazardClass]
-                    category = category_col.selectbox(
-                        "Category",
-                        category_options,
-                        index=category_options.index(str(row["category"])) if str(row["category"]) in category_options else 0,
-                    )
-                    hazard = hazard_col.selectbox(
-                        "Hazard class",
-                        hazard_options,
-                        index=hazard_options.index(str(row["hazard_class"])) if str(row["hazard_class"]) in hazard_options else 0,
-                    )
-                    remove_col, apply_row_col = st.columns([1, 2])
-                    remove_row = remove_col.form_submit_button("Remove cargo", icon=":material/delete:", use_container_width=True)
-                    apply_row = apply_row_col.form_submit_button("Apply row changes", type="primary", icon=":material/check:", use_container_width=True)
-                if remove_row:
-                    draft_rows.pop(selected_index)
-                    st.session_state["scenario_draft_rows"] = draft_rows
-                    st.session_state["scenario_draft_revision"] += 1
-                    st.rerun()
-                if apply_row:
-                    draft_rows[selected_index] = {
-                        "cargo_id": cargo_id,
-                        "name": name,
-                        "weight_kg": weight,
-                        "category": category,
-                        "hazard_class": hazard,
-                        "priority": priority,
-                    }
-                    st.session_state["scenario_draft_rows"] = draft_rows
-                    st.session_state["scenario_draft_revision"] += 1
-                    st.rerun()
-
-            st.markdown("#### Manifest preview")
             st.dataframe(
                 pd.DataFrame(draft_rows, columns=MANIFEST_COLUMNS),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "cargo_id": st.column_config.TextColumn("Cargo ID"),
+                    "cargo_id": st.column_config.TextColumn("Cargo ID", width="small"),
                     "name": st.column_config.TextColumn("Name"),
                     "weight_kg": st.column_config.NumberColumn("Weight (kg)", format="%.1f"),
                     "category": st.column_config.TextColumn("Category"),
-                    "hazard_class": st.column_config.TextColumn("Hazard class"),
-                    "priority": st.column_config.NumberColumn("Priority"),
+                    "hazard_class": st.column_config.TextColumn("Hazard Class"),
+                    "priority": st.column_config.NumberColumn("Priority", width="small"),
                 },
             )
-        else:
-            st.info("The draft manifest is empty. Add cargo manually or import a CSV to continue.")
 
+            # Clean edit form for an item
+            with st.expander("✏️ Edit or Remove an Item", expanded=False):
+                labels = [
+                    f"{index + 1:02d} | {row['cargo_id']} - {row['name']} ({row['weight_kg']:.0f} kg, {row['hazard_class']})"
+                    for index, row in enumerate(draft_rows)
+                ]
+                selected_index = st.selectbox(
+                    "Select item to modify",
+                    range(len(draft_rows)),
+                    format_func=lambda idx: labels[idx],
+                    key=f"edit_cargo_sel_{st.session_state['scenario_draft_revision']}",
+                )
+                row = draft_rows[selected_index]
+                with st.form(f"cargo_edit_form_{st.session_state['scenario_draft_revision']}_{selected_index}"):
+                    c1, c2 = st.columns([1, 2])
+                    c_id = c1.text_input("Cargo ID", value=str(row["cargo_id"]))
+                    c_name = c2.text_input("Name", value=str(row["name"]))
+
+                    w1, p1 = st.columns(2)
+                    c_weight = w1.number_input("Weight (kg)", min_value=0.01, value=float(row["weight_kg"]), step=10.0)
+                    priority_options = list(range(1, 6))
+                    cur_p = int(float(row["priority"])) if str(row["priority"]).strip() else 1
+                    c_priority = p1.selectbox(
+                        "Priority (1 = standard, 5 = urgent)",
+                        priority_options,
+                        index=priority_options.index(cur_p) if cur_p in priority_options else 0,
+                    )
+
+                    cat_col, haz_col = st.columns(2)
+                    cat_options = [item.value for item in CargoCategory]
+                    haz_options = [item.value for item in HazardClass]
+                    c_cat = cat_col.selectbox(
+                        "Category",
+                        cat_options,
+                        index=cat_options.index(str(row["category"])) if str(row["category"]) in cat_options else 0,
+                    )
+                    c_haz = haz_col.selectbox(
+                        "Hazard Class",
+                        haz_options,
+                        index=haz_options.index(str(row["hazard_class"])) if str(row["hazard_class"]) in haz_options else 0,
+                    )
+
+                    apply_clicked = st.form_submit_button("Save changes to item", type="primary", icon=":material/check:", use_container_width=True)
+
+                del_col, _ = st.columns([1, 1])
+                remove_clicked = del_col.button("Delete this item", icon=":material/delete:", use_container_width=True, help="Remove this cargo item from the manifest")
+
+                if remove_clicked:
+                    draft_rows.pop(selected_index)
+                    st.session_state["scenario_draft_rows"] = draft_rows
+                    st.session_state["scenario_draft_revision"] += 1
+                    st.rerun()
+                    st.rerun()
+                if apply_clicked:
+                    draft_rows[selected_index] = {
+                        "cargo_id": c_id,
+                        "name": c_name,
+                        "weight_kg": c_weight,
+                        "category": c_cat,
+                        "hazard_class": c_haz,
+                        "priority": c_priority,
+                    }
+                    st.session_state["scenario_draft_rows"] = draft_rows
+                    st.session_state["scenario_draft_revision"] += 1
+                    st.rerun()
+        else:
+            st.info("No cargo has been added yet. Click 'Add cargo item' or import a CSV to begin.")
+
+    # -------------------------------------------------------------------------
+    # TAB 2: AIRCRAFT LIMITS
+    # -------------------------------------------------------------------------
+    with limits_tab:
+        st.markdown("### Aircraft Operating Envelope")
+        st.caption("Configure structural and aerodynamic operating limits for the current scenario.")
+
+        r1_col1, r1_col2, r1_col3 = st.columns(3)
+        r1_col1.number_input("Maximum payload (kg)", min_value=1.0, step=100.0, key="draft_max_payload_kg",
+                             help="Maximum combined weight of all loaded cargo.")
+        r1_col2.number_input("Target CG (m)", step=0.1, format="%.2f", key="draft_target_cg_m",
+                             help="The preferred aerodynamic balance point used as optimization target.")
+        r1_col3.number_input("Lateral imbalance limit (kg)", min_value=0.0, step=25.0, key="draft_lateral_limit_kg",
+                             help="Maximum allowable weight difference between left and right bays.")
+
+        r2_col1, r2_col2 = st.columns(2)
+        r2_col1.number_input("CG minimum (forward limit, m)", step=0.1, format="%.2f", key="draft_cg_min_m",
+                             help="Most forward allowable Center of Gravity position.")
+        r2_col2.number_input("CG maximum (aft limit, m)", step=0.1, format="%.2f", key="draft_cg_max_m",
+                             help="Most aft allowable Center of Gravity position.")
+
+        with st.expander("ℹ️ Advanced Aircraft Information (Fixed Bay Topology)", expanded=False):
+            st.caption("Bay layout, longitudinal arms, and physical adjacency are determined by the ALT-8 airframe model.")
+            bay_data = [
+                {"Bay": b.bay_id, "Row": b.row, "Side": b.side.value, "Arm (m)": b.longitudinal_arm_m,
+                 "Max Capacity (kg)": b.max_weight_kg, "Adjacent Bays": ", ".join(b.adjacent_bays)}
+                for b in base_aircraft.bays
+            ]
+            st.dataframe(pd.DataFrame(bay_data), use_container_width=True, hide_index=True)
+
+    # -------------------------------------------------------------------------
+    # TAB 3: IMPORT & TEMPLATES
+    # -------------------------------------------------------------------------
+    with templates_tab:
+        st.markdown("### Scenario Templates & CSV Transfer")
+        st.caption("Quickly populate the manifest using standard teaching scenarios or external CSV files.")
+
+        templates = scenario_templates(sample_rows)
+        st.markdown("#### Load a Curated Template")
+        selected_template = st.radio(
+            "Select scenario template",
+            list(templates),
+            horizontal=True,
+            key="selected_scenario_template",
+        )
+        t_desc_col, t_apply_col = st.columns([3.5, 1.5], vertical_alignment="center")
+        t_desc_col.caption(templates[selected_template]["description"])
+        if t_apply_col.button("Apply this template", icon=":material/content_copy:", use_container_width=True, type="primary"):
+            st.session_state["scenario_draft_rows"] = normalise_rows(templates[selected_template]["rows"])
+            st.session_state["scenario_draft_revision"] += 1
+            st.rerun()
+
+        st.divider()
+        st.markdown("#### CSV Import & Export")
+        csv_col1, csv_col2 = st.columns(2)
+        with csv_col1:
+            st.markdown("**Import from CSV**")
+            uploaded = st.file_uploader("Upload manifest CSV", type=["csv"], key="draft_csv_uploader")
+            if uploaded is not None:
+                rows, upload_errors = import_manifest(uploaded)
+                if upload_errors:
+                    for error in upload_errors:
+                        st.error(error)
+                elif st.button("Load uploaded CSV into draft", type="primary", use_container_width=True):
+                    st.session_state["scenario_draft_rows"] = rows
+                    st.session_state["scenario_draft_revision"] += 1
+                    st.rerun()
+
+        with csv_col2:
+            st.markdown("**Export Draft to CSV**")
+            st.caption("Download the current draft manifest to a CSV file on your local machine.")
+            st.download_button(
+                "Download draft CSV",
+                manifest_csv(st.session_state["scenario_draft_rows"]),
+                "aeroload_scenario_draft.csv",
+                "text/csv",
+                use_container_width=True,
+                icon=":material/download:",
+            )
+
+    # -------------------------------------------------------------------------
+    # DRAFT VALIDATION & SAVE / CANCEL ACTION BAR
+    # -------------------------------------------------------------------------
     draft_aircraft, aircraft_errors = _draft_aircraft(base_aircraft)
     draft_items, manifest_errors = manifest_from_rows(st.session_state["scenario_draft_rows"], allow_empty=True)
     manifest_errors.extend(validate_manifest_for_aircraft(draft_items, draft_aircraft))
     errors = [*aircraft_errors, *manifest_errors]
+
+    st.divider()
     if errors:
         for error in errors:
             st.error(error)
     elif draft_items:
-        st.success(f"Draft valid · {len(draft_items)} items · {sum(item.weight_kg for item in draft_items):,.0f} kg")
+        st.success(f"✓ Scenario is valid: {len(draft_items)} items · {sum(item.weight_kg for item in draft_items):,.0f} kg payload.")
     else:
-        st.caption("Draft is empty. Click 'Save changes' to confirm an empty manifest.")
+        st.info("Scenario draft is currently empty. Click 'Save changes' to confirm an empty manifest.")
 
     with st.container(key="scenario_actions"):
         summary_col, cancel_col, save_col = st.columns([3, 1, 1])
@@ -378,25 +426,44 @@ def _assignment_frame(csp: AeroLoadCSP, assignment: dict[str, str]) -> pd.DataFr
     rows = []
     for cargo_id, bay_id in assignment.items():
         cargo, bay = csp.get_cargo(cargo_id), csp.get_bay(bay_id)
-        rows.append({"Cargo ID": cargo_id, "Name": cargo.name, "Bay": bay_id, "Side": bay.side.value,
-                     "Arm (m)": bay.longitudinal_arm_m, "Weight (kg)": cargo.weight_kg,
-                     "Bay use (%)": round(cargo.weight_kg / bay.max_weight_kg * 100, 1),
-                     "Hazard": cargo.hazard_class.value})
+        rows.append({
+            "Cargo ID": cargo_id,
+            "Name": cargo.name,
+            "Bay": bay_id,
+            "Side": bay.side.value,
+            "Arm (m)": bay.longitudinal_arm_m,
+            "Weight (kg)": cargo.weight_kg,
+            "Bay use (%)": round(cargo.weight_kg / bay.max_weight_kg * 100, 1),
+            "Hazard": cargo.hazard_class.value,
+        })
     return pd.DataFrame(rows)
 
 
 def run_dashboard() -> None:
-    st.set_page_config(page_title="AeroLoad-AI", page_icon="✈", layout="wide",
-                       initial_sidebar_state="collapsed")
+    st.set_page_config(
+        page_title="AeroLoad-AI — Aircraft Cargo Balance Engine",
+        page_icon="✈",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
     st.markdown(get_global_css(), unsafe_allow_html=True)
     base_aircraft, sample_cargo, knowledge = load_project_data()
     sample_rows = cargo_rows(sample_cargo)
-    _initialize_state(base_aircraft, sample_rows)
+
+    # Lifecycle bug fix: handle pending reset BEFORE any widgets are created
+    if st.session_state.pop("pending_workspace_reset", False):
+        _apply_workspace_reset(base_aircraft, sample_rows)
+    else:
+        _initialize_state(base_aircraft, sample_rows)
+
     aircraft, config_errors = _configured_aircraft(base_aircraft)
 
+    # -------------------------------------------------------------------------
+    # TOP HEADER
+    # -------------------------------------------------------------------------
     with st.container(key="app_header"):
         brand_col, aircraft_col, scenario_col, docs_col, settings_col = st.columns(
-            [2.25, 1.25, 0.72, 0.58, 0.62],
+            [2.3, 1.2, 0.9, 0.8, 0.7],
             vertical_alignment="center",
         )
         with brand_col:
@@ -404,12 +471,12 @@ def run_dashboard() -> None:
         with aircraft_col:
             render_aircraft_status(aircraft.name, aircraft.aircraft_id, len(aircraft.bays))
         with scenario_col:
-            if st.button("Scenario", icon=":material/database:", use_container_width=True,
+            if st.button("Edit Scenario", icon=":material/edit_note:", use_container_width=True,
                          key="open_scenario_data"):
                 _open_scenario_editor()
                 st.rerun()
         with docs_col:
-            if st.button("Docs", icon=":material/menu_book:", use_container_width=True,
+            if st.button("Help / Docs", icon=":material/help_outline:", use_container_width=True,
                          key="open_docs"):
                 _open_docs()
                 st.rerun()
@@ -445,38 +512,57 @@ def run_dashboard() -> None:
     stored_result = st.session_state.get("analysis_result")
     result_is_current = stored_result is not None and st.session_state.get("analysis_fingerprint") == fingerprint
 
-    # KPI Strip
+    # -------------------------------------------------------------------------
+    # KPI METRIC STRIP
+    # -------------------------------------------------------------------------
     kpi_slot = st.container()
     with kpi_slot:
         payload = sum(item.weight_kg for item in cargo_items)
         render_kpi_strip(
-            item_count=len(cargo_items), bay_count=len(aircraft.bays), payload_kg=payload,
-            max_payload_kg=aircraft.max_payload_kg, target_cg_m=aircraft.target_cg_m,
-            cg_min_m=aircraft.cg_min_m, cg_max_m=aircraft.cg_max_m,
+            item_count=len(cargo_items),
+            bay_count=len(aircraft.bays),
+            payload_kg=payload,
+            max_payload_kg=aircraft.max_payload_kg,
+            target_cg_m=aircraft.target_cg_m,
+            cg_min_m=aircraft.cg_min_m,
+            cg_max_m=aircraft.cg_max_m,
             analysis_current=result_is_current and bool(cargo_items),
         )
 
-    # Mode Selector
+    # -------------------------------------------------------------------------
+    # WORKFLOW INDICATOR (Phase 8B)
+    # -------------------------------------------------------------------------
+    planning_mode = st.session_state.get("planning_mode", "Auto Solve")
+    manual_assignments = st.session_state.get("manual_assignments", {})
+    if planning_mode == "Auto Solve":
+        current_step = 4 if result_is_current else (3 if cargo_items else 1)
+    else:
+        current_step = 4 if (len(manual_assignments) == len(cargo_items) and cargo_items) else (3 if cargo_items else 1)
+
+    render_workflow_indicator(current_step)
+
+    # -------------------------------------------------------------------------
+    # PLANNING MODE SELECTION (Phase 8E)
+    # -------------------------------------------------------------------------
     st.markdown("<div class='section-label'>Planning & Operations Mode</div>", unsafe_allow_html=True)
-    mode_col, info_col = st.columns([2.2, 1], vertical_alignment="center")
+    mode_descriptions = {
+        "Auto Solve": "Let AeroLoad-AI generate a complete, balance-optimized loading plan.",
+        "Manual Planning": "Place cargo yourself and let AeroLoad-AI validate your plan.",
+        "AI-Assisted Planning": "Place cargo yourself while AeroLoad-AI shows legal and blocked bays.",
+    }
+
+    mode_col, info_col = st.columns([2.0, 1.2], vertical_alignment="center")
     with mode_col:
         planning_mode = st.radio(
             "Planning mode",
             ["Auto Solve", "Manual Planning", "AI-Assisted Planning"],
-            index=["Auto Solve", "Manual Planning", "AI-Assisted Planning"].index(
-                st.session_state.get("planning_mode", "Auto Solve")
-            ),
+            index=["Auto Solve", "Manual Planning", "AI-Assisted Planning"].index(planning_mode),
             horizontal=True,
             key="planning_mode",
             label_visibility="collapsed",
         )
     with info_col:
-        if planning_mode == "Auto Solve":
-            st.caption("🤖 **Auto Solve**: AC-3 propagation + MRV/LCV search + hill climbing")
-        elif planning_mode == "Manual Planning":
-            st.caption("🖐️ **Manual Planning**: Interactive placement with live constraint validation")
-        else:
-            st.caption("🧠 **AI-Assisted**: Live CSP domain inspection and guidance")
+        st.caption(f"💡 **{planning_mode}**: {mode_descriptions[planning_mode]}")
 
     with st.expander("🎓 How AeroLoad-AI Solves This — AI Architecture & Pipeline", expanded=False):
         st.markdown(
@@ -506,14 +592,15 @@ def run_dashboard() -> None:
         st.markdown("<div class='section-label'>Aircraft load workspace</div>", unsafe_allow_html=True)
 
         if not cargo_items:
-            st.info("No cargo has been added yet. Add cargo manually or import a CSV in Scenario Data to begin.")
+            st.info("No cargo has been added yet. Click 'Edit Scenario' in the header or import a CSV to begin.")
 
         # ---------------------------------------------------------------------
-        # MODE 1: AUTO SOLVE
+        # MODE 1: AUTO SOLVE (Phase 8I)
         # ---------------------------------------------------------------------
         if planning_mode == "Auto Solve":
             deck_col, control_col = st.columns([2.1, 1])
             result = stored_result if result_is_current else None
+
             with deck_col:
                 if result and result.final_assignment:
                     render_aircraft_layout(current_csp, result.final_assignment, mode="AUTO")
@@ -522,23 +609,32 @@ def run_dashboard() -> None:
 
             with control_col:
                 with st.container(border=True):
-                    st.markdown("### Dispatch analysis")
-                    render_status_pill("Preflight", "Ready" if not all_errors and cargo_items else "Blocked")
-                    st.caption("AC-3 propagation · MRV/LCV search · safety validation · optional local optimization")
+                    st.markdown("### Autonomous Solver")
+                    render_status_pill("Pre-Solve", "Ready" if not all_errors and cargo_items else "Blocked")
+                    st.caption("AC-3 domain pruning · MRV/LCV search · safety validation · local optimization")
                     for error in config_errors:
                         st.error(error)
                     if not result_is_current and stored_result is not None:
                         st.warning("Inputs changed. Run the solver again to refresh the plan.")
                     if not cargo_items:
                         st.caption("Add at least one cargo item to run the solver.")
-                    run_solver = st.button("Run AeroLoad-AI", type="primary", use_container_width=True,
-                                           disabled=bool(all_errors) or not cargo_items, icon=":material/flight_takeoff:")
-                    st.caption(f"Optimization {'on' if st.session_state['enable_optimization'] else 'off'} · "
-                               f"{st.session_state['optimization_iterations']} iteration limit")
+                    run_solver = st.button(
+                        "Run AeroLoad-AI",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=bool(all_errors) or not cargo_items,
+                        icon=":material/flight_takeoff:",
+                    )
+                    st.caption(
+                        f"Optimization {'enabled' if st.session_state['enable_optimization'] else 'disabled'} · "
+                        f"{st.session_state['optimization_iterations']} max iterations"
+                    )
+
                 if run_solver:
                     with st.spinner("Solving placement, validating safety and evaluating balance..."):
                         current_result = analyze_loading_problem(
-                            current_csp, optimize=st.session_state["enable_optimization"],
+                            current_csp,
+                            optimize=st.session_state["enable_optimization"],
                             max_optimization_iterations=int(st.session_state["optimization_iterations"]),
                         )
                     st.session_state["analysis_result"] = current_result
@@ -546,7 +642,7 @@ def run_dashboard() -> None:
                     st.session_state["analysis_fingerprint"] = fingerprint
                     st.rerun()
 
-            # Show auto-solver telemetry
+            # Show auto-solver results (Lead with the answer!)
             if result and result.final_assignment:
                 assignments = assignment_to_cargo_assignments(current_csp, result.final_assignment)
                 safety_report = validate_loading_plan(aircraft, assignments)
@@ -554,38 +650,76 @@ def run_dashboard() -> None:
                 initial_cg = (result.optimization_result.initial_quality.cg_m
                               if result.optimization_result else safety_report.cg_m)
                 final_cg = safety_report.cg_m
+
+                # 1. Answer banner
+                if safety_report.safe:
+                    st.success("✓ Safe loading plan found — passes AeroLoad-AI simulation safety checks (structural, balance and hazard constraints satisfied).", icon=":material/check_circle:")
+                else:
+                    st.error("✕ Plan violates aircraft constraints.", icon=":material/error:")
+
+                # 2. Key metrics in a clean row
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Payload", f"{safety_report.total_payload_kg:,.0f} / {aircraft.max_payload_kg:,.0f} kg")
+                m2.metric("Final CG", f"{safety_report.cg_m:+.3f} m")
+                m3.metric("Target CG", f"{aircraft.target_cg_m:+.2f} m")
+                m4.metric("Lateral Imbalance", f"{safety_report.lateral_imbalance_kg:,.0f} kg",
+                          f"Limit: {aircraft.lateral_imbalance_limit_kg:,.0f} kg")
+
+                # 3. CG and balance telemetry charts
                 with charts_slot:
                     cg_col, lateral_col = st.columns(2)
-                    cg_col.plotly_chart(cg_envelope_figure(
-                        cg_min_m=aircraft.cg_min_m, cg_max_m=aircraft.cg_max_m,
-                        target_m=aircraft.target_cg_m, initial_m=initial_cg, final_m=final_cg),
-                        use_container_width=True, config={"displayModeBar": False})
-                    lateral_col.plotly_chart(lateral_balance_figure(
-                        left_kg=left_kg, right_kg=right_kg,
-                        limit_kg=aircraft.lateral_imbalance_limit_kg),
-                        use_container_width=True, config={"displayModeBar": False})
+                    cg_col.plotly_chart(
+                        cg_envelope_figure(
+                            cg_min_m=aircraft.cg_min_m,
+                            cg_max_m=aircraft.cg_max_m,
+                            target_m=aircraft.target_cg_m,
+                            initial_m=initial_cg,
+                            final_m=final_cg,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
+                    lateral_col.plotly_chart(
+                        lateral_balance_figure(
+                            left_kg=left_kg,
+                            right_kg=right_kg,
+                            limit_kg=aircraft.lateral_imbalance_limit_kg,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
 
+                # 4. Secondary technical tabs
                 assignment_frame = _assignment_frame(current_csp, result.final_assignment)
                 with tabs_slot:
                     load_tab, safety_tab, optimization_tab, audit_tab, manifest_tab = st.tabs(
-                        ["Load Plan", "Safety & Hazmat", "Optimization", "AI Solver Audit", "Manifest"]
+                        ["Load Plan Table", "Safety Checks", "Optimization Details", "AI Solver Audit", "Manifest"]
                     )
                     with load_tab:
-                        st.markdown("### Final aircraft load plan")
-                        a, b, c, d = st.columns(4)
-                        a.metric("Payload", f"{safety_report.total_payload_kg:,.0f} kg")
-                        b.metric("Final CG", f"{safety_report.cg_m:+.3f} m")
-                        c.metric("Lateral imbalance", f"{safety_report.lateral_imbalance_kg:,.0f} kg")
-                        d.metric("Safety", "PASS" if safety_report.safe else "FAIL")
+                        st.markdown("#### Aircraft Bay Assignments")
                         st.dataframe(assignment_frame, use_container_width=True, hide_index=True)
-                        st.download_button("Export final plan CSV", assignment_frame.to_csv(index=False).encode("utf-8"),
-                                           "aeroload_final_plan.csv", "text/csv")
+                        st.download_button(
+                            "Export load plan CSV",
+                            assignment_frame.to_csv(index=False).encode("utf-8"),
+                            "aeroload_final_plan.csv",
+                            "text/csv",
+                            icon=":material/download:",
+                        )
+
                     with safety_tab:
+                        st.markdown("#### Safety & Constraint Evaluation")
                         if result.loading_explanation:
                             for item in result.loading_explanation.items:
                                 message = f"**{item.category}:** {item.message}"
-                                st.success(message) if item.status == "PASS" else st.error(message) if item.status == "FAIL" else st.info(message)
+                                if item.status == "PASS":
+                                    st.success(message)
+                                elif item.status == "FAIL":
+                                    st.error(message)
+                                else:
+                                    st.info(message)
+
                     with optimization_tab:
+                        st.markdown("#### Hill-Climbing Local Search")
                         optimization = result.optimization_result
                         if optimization is None:
                             st.info("Optimization was disabled for this run.")
@@ -593,39 +727,37 @@ def run_dashboard() -> None:
                             o1, o2, o3, o4 = st.columns(4)
                             o1.metric("Initial score", f"{optimization.initial_quality.score:.4f}")
                             o2.metric("Final score", f"{optimization.final_quality.score:.4f}")
-                            o3.metric("Candidates", optimization.candidates_evaluated)
-                            o4.metric("Improvements", optimization.improvements)
+                            o3.metric("Candidates evaluated", optimization.candidates_evaluated)
+                            o4.metric("Improvements accepted", optimization.improvements)
                             for step in optimization.steps:
                                 with st.container(border=True):
                                     st.markdown(f"**Iteration {step.iteration} · {step.move_type}**")
                                     st.write(step.description)
                                     st.caption(f"Score {step.score_before:.4f} → {step.score_after:.4f} · CG {step.cg_before_m:+.3f} → {step.cg_after_m:+.3f} m")
                             if not optimization.steps:
-                                st.info("The initial safe solution was already a local optimum.")
+                                st.info("The initial feasible solution was already a local optimum.")
+
                     with audit_tab:
+                        st.markdown("#### Search & Propagation Statistics")
                         s1, s2, s3, s4 = st.columns(4)
-                        s1.metric("Nodes explored", result.solver_result.nodes_explored)
-                        s1.caption("CSP search states")
-                        s2.metric("Backtracks", result.solver_result.backtracks)
-                        s2.caption("Dead-ends recovered")
-                        s3.metric("AC-3 values pruned", result.solver_result.ac3_values_pruned)
-                        s3.caption("Unsupported values removed")
-                        s4.metric("AC-3 arcs processed", result.solver_result.ac3_arcs_processed)
-                        s4.caption("Directed constraints checked")
-                        st.info("Pipeline preserved: AC-3 constraint propagation → MRV/LCV backtracking → safety validation → optional local search → explanations.")
+                        s1.metric("Nodes explored", result.solver_result.nodes_explored, help="Total search states visited")
+                        s2.metric("Backtracks", result.solver_result.backtracks, help="Dead-ends recovered")
+                        s3.metric("AC-3 values pruned", result.solver_result.ac3_values_pruned, help="Unsupported bay choices eliminated before search")
+                        s4.metric("AC-3 arcs processed", result.solver_result.ac3_arcs_processed, help="Directed constraint pairs evaluated")
+                        st.caption("Pipeline: AC-3 constraint propagation → MRV variable selection → LCV value ordering → Backtracking search → Safety validation → Hill climbing.")
+
                     with manifest_tab:
                         _render_manifest_tab()
             else:
                 with charts_slot:
-                    st.info("Run AeroLoad-AI to generate live CG and lateral-balance telemetry.")
+                    st.info("Run AeroLoad-AI to generate live Center of Gravity and lateral balance telemetry.")
                 with tabs_slot:
                     _render_fallback_tabs()
 
         # ---------------------------------------------------------------------
-        # MODE 2: MANUAL PLANNING
+        # MODE 2: MANUAL PLANNING (Phase 8G)
         # ---------------------------------------------------------------------
         elif planning_mode == "Manual Planning":
-            manual_assignments = st.session_state.get("manual_assignments", {})
             manual_status = validate_manual_plan(aircraft, cargo_items, manual_assignments, knowledge)
 
             deck_col, control_col = st.columns([2.1, 1])
@@ -674,12 +806,13 @@ def run_dashboard() -> None:
                     else:
                         st.caption("No cargo available to place.")
 
-                # Manual Plan Summary
+                # Plan Progress & Status
                 with st.container(border=True):
-                    st.markdown("#### Plan summary")
-                    s1, s2 = st.columns(2)
+                    st.markdown("#### Plan Status")
+                    s1, s2, s3 = st.columns(3)
                     s1.metric("Assigned", f"{manual_status.assigned_count}/{manual_status.total_count}")
-                    s2.metric("Occupied bays", f"{manual_status.occupied_bays}/{manual_status.total_bays}")
+                    s2.metric("Remaining", f"{manual_status.total_count - manual_status.assigned_count}")
+                    s3.metric("Bays used", f"{manual_status.occupied_bays}/{manual_status.total_bays}")
 
                     if manual_status.payload_kg > 0:
                         p1, p2 = st.columns(2)
@@ -688,9 +821,9 @@ def run_dashboard() -> None:
                             p2.metric("CG position", f"{manual_status.cg_preview:+.3f} m")
 
                     if manual_status.is_complete:
-                        render_status_pill("Plan Status", "SAFE" if manual_status.is_valid else "UNSAFE")
+                        render_status_pill("Status", "SAFE" if manual_status.is_valid else "UNSAFE")
                     else:
-                        render_status_pill("Plan", "INCOMPLETE")
+                        render_status_pill("Status", "INCOMPLETE")
                     st.caption(manual_status.message)
 
                     if manual_status.violations:
@@ -703,23 +836,38 @@ def run_dashboard() -> None:
                 left_kg, right_kg = calculate_side_weights(assignments)
                 with charts_slot:
                     cg_col, lateral_col = st.columns(2)
-                    cg_col.plotly_chart(cg_envelope_figure(
-                        cg_min_m=aircraft.cg_min_m, cg_max_m=aircraft.cg_max_m,
-                        target_m=aircraft.target_cg_m, initial_m=None, final_m=manual_status.safety_report.cg_m),
-                        use_container_width=True, config={"displayModeBar": False})
-                    lateral_col.plotly_chart(lateral_balance_figure(
-                        left_kg=left_kg, right_kg=right_kg,
-                        limit_kg=aircraft.lateral_imbalance_limit_kg),
-                        use_container_width=True, config={"displayModeBar": False})
+                    cg_col.plotly_chart(
+                        cg_envelope_figure(
+                            cg_min_m=aircraft.cg_min_m,
+                            cg_max_m=aircraft.cg_max_m,
+                            target_m=aircraft.target_cg_m,
+                            initial_m=None,
+                            final_m=manual_status.safety_report.cg_m,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
+                    lateral_col.plotly_chart(
+                        lateral_balance_figure(
+                            left_kg=left_kg,
+                            right_kg=right_kg,
+                            limit_kg=aircraft.lateral_imbalance_limit_kg,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
             else:
                 with charts_slot:
-                    st.info("Assign all cargo items to view full flight envelope telemetry.")
+                    remaining_count = manual_status.total_count - manual_status.assigned_count
+                    if remaining_count > 0:
+                        st.info(f"{remaining_count} cargo item{'s' if remaining_count != 1 else ''} still require placement to view full flight envelope telemetry.")
+                    else:
+                        st.info("Assign all cargo items to view full flight envelope telemetry.")
 
         # ---------------------------------------------------------------------
-        # MODE 3: AI-ASSISTED PLANNING
+        # MODE 3: AI-ASSISTED PLANNING (Phase 8H)
         # ---------------------------------------------------------------------
         else:
-            manual_assignments = st.session_state.get("manual_assignments", {})
             manual_status = validate_manual_plan(aircraft, cargo_items, manual_assignments, knowledge)
 
             if cargo_items:
@@ -753,32 +901,12 @@ def run_dashboard() -> None:
             with control_col:
                 if selected_cargo and domain_analysis:
                     with st.container(border=True):
-                        st.markdown(f"### CSP Domain Analysis · `{selected_cargo.cargo_id}`")
-                        st.markdown(f"**Variable:** $X_{{{selected_cargo.cargo_id}}}$ ({escape(selected_cargo.name)})")
-                        st.caption(f"Weight: {selected_cargo.weight_kg:,.0f} kg · Hazard Class: {selected_cargo.hazard_class.value}")
+                        st.markdown(f"### AI Guidance · `{selected_cargo.cargo_id}`")
+                        st.write(f"**{selected_cargo.name}** · {selected_cargo.weight_kg:,.0f} kg")
+                        st.caption(f"Category: {selected_cargo.category.value} · Hazard: {selected_cargo.hazard_class.value}")
 
-                        legal_str = ", ".join(domain_analysis.legal_bays) if domain_analysis.legal_bays else "\\emptyset"
-                        st.markdown("**Current Legal Domain:**")
-                        st.markdown(f"$$D(X_{{{selected_cargo.cargo_id}}}) = \\{{ {legal_str} \\}}$$")
-
-                        st.markdown("**Domain values breakdown:**")
-                        for bay in aircraft.bays:
-                            opt = domain_analysis.bay_options[bay.bay_id]
-                            if opt.status == BayOptionStatus.LEGAL:
-                                st.markdown(f"- :green[**{bay.bay_id}**] — ✓ **LEGAL**: {escape(opt.reason)}")
-                            elif opt.status == BayOptionStatus.ILLEGAL:
-                                st.markdown(f"- :red[**{bay.bay_id}**] — ✕ **BLOCKED**: {escape(opt.reason)}")
-                            else:
-                                st.markdown(f"- :gray[**{bay.bay_id}**] — ● **OCCUPIED**: {escape(opt.reason)}")
-
-                        st.divider()
-                        st.caption("🎓 **Unit II CSP Concept**: Cargo items are variables ($X$) and bays are domain values ($D$). Unary capacity and binary hazard constraints prune inconsistent values from $D(X_i)$.")
-
-                    # Placement actions
-                    with st.container(border=True):
-                        st.markdown("#### Direct placement")
                         if domain_analysis.legal_bays:
-                            st.caption("Click any legal bay below to assign:")
+                            st.caption("Click a legal bay to place this cargo:")
                             btn_cols = st.columns(min(len(domain_analysis.legal_bays), 4))
                             for i, b_id in enumerate(domain_analysis.legal_bays):
                                 col = btn_cols[i % len(btn_cols)]
@@ -788,7 +916,7 @@ def run_dashboard() -> None:
                                     )
                                     st.rerun()
                         else:
-                            st.warning("Domain wipeout! No legal bay exists for this cargo under current placements.")
+                            st.warning("No legal bays exist for this cargo under current placements.")
 
                         un_col, reset_col = st.columns(2)
                         if un_col.button("Remove from bay", use_container_width=True, icon=":material/close:",
@@ -801,37 +929,65 @@ def run_dashboard() -> None:
                         if reset_col.button("Reset all", use_container_width=True, icon=":material/refresh:"):
                             st.session_state["manual_assignments"] = clear_manual_assignments()
                             st.rerun()
+
+                    # Progressive disclosure: technical CSP expander
+                    with st.expander("🎓 Show CSP Domain Explanation", expanded=st.session_state.get("show_technical_details", False)):
+                        st.markdown(f"**Variable:** $X_{{{selected_cargo.cargo_id}}}$")
+                        legal_str = ", ".join(domain_analysis.legal_bays) if domain_analysis.legal_bays else "\\emptyset"
+                        st.markdown(f"**Current Legal Domain:** $$D(X_{{{selected_cargo.cargo_id}}}) = \\{{ {legal_str} \\}}$$")
+                        st.markdown("**Bay evaluation breakdown:**")
+                        for bay in aircraft.bays:
+                            opt = domain_analysis.bay_options[bay.bay_id]
+                            if opt.status == BayOptionStatus.LEGAL:
+                                st.markdown(f"- :green[**{bay.bay_id}**] — ✓ **LEGAL**: {escape(opt.reason)}")
+                            elif opt.status == BayOptionStatus.ILLEGAL:
+                                st.markdown(f"- :red[**{bay.bay_id}**] — ✕ **BLOCKED**: {escape(opt.reason)}")
+                            else:
+                                st.markdown(f"- :gray[**{bay.bay_id}**] — ● **OCCUPIED**: {escape(opt.reason)}")
+                        st.caption("Cargo items are variables ($X$) and bays are domain values ($D$). Constraints prune unviable bays.")
+
+                    # Plan status
+                    with st.container(border=True):
+                        st.markdown("#### Plan Status")
+                        s1, s2 = st.columns(2)
+                        s1.metric("Assigned", f"{manual_status.assigned_count}/{manual_status.total_count}")
+                        s2.metric("Bays used", f"{manual_status.occupied_bays}/{manual_status.total_bays}")
+                        if manual_status.is_complete:
+                            render_status_pill("Status", "SAFE" if manual_status.is_valid else "UNSAFE")
+                        else:
+                            render_status_pill("Status", "INCOMPLETE")
+                        st.caption(manual_status.message)
+                        if manual_status.violations:
+                            for violation in manual_status.violations:
+                                st.error(violation)
                 else:
                     st.caption("Add cargo to inspect CSP domains.")
-
-                # Plan status
-                with st.container(border=True):
-                    st.markdown("#### Plan summary")
-                    s1, s2 = st.columns(2)
-                    s1.metric("Assigned", f"{manual_status.assigned_count}/{manual_status.total_count}")
-                    s2.metric("Occupied bays", f"{manual_status.occupied_bays}/{manual_status.total_bays}")
-                    if manual_status.is_complete:
-                        render_status_pill("Plan Status", "SAFE" if manual_status.is_valid else "UNSAFE")
-                    else:
-                        render_status_pill("Plan", "INCOMPLETE")
-                    st.caption(manual_status.message)
-                    if manual_status.violations:
-                        for violation in manual_status.violations:
-                            st.error(violation)
 
             if manual_status.is_complete and manual_status.safety_report:
                 assignments = assignment_to_cargo_assignments(current_csp, manual_assignments)
                 left_kg, right_kg = calculate_side_weights(assignments)
                 with charts_slot:
                     cg_col, lateral_col = st.columns(2)
-                    cg_col.plotly_chart(cg_envelope_figure(
-                        cg_min_m=aircraft.cg_min_m, cg_max_m=aircraft.cg_max_m,
-                        target_m=aircraft.target_cg_m, initial_m=None, final_m=manual_status.safety_report.cg_m),
-                        use_container_width=True, config={"displayModeBar": False})
-                    lateral_col.plotly_chart(lateral_balance_figure(
-                        left_kg=left_kg, right_kg=right_kg,
-                        limit_kg=aircraft.lateral_imbalance_limit_kg),
-                        use_container_width=True, config={"displayModeBar": False})
+                    cg_col.plotly_chart(
+                        cg_envelope_figure(
+                            cg_min_m=aircraft.cg_min_m,
+                            cg_max_m=aircraft.cg_max_m,
+                            target_m=aircraft.target_cg_m,
+                            initial_m=None,
+                            final_m=manual_status.safety_report.cg_m,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
+                    lateral_col.plotly_chart(
+                        lateral_balance_figure(
+                            left_kg=left_kg,
+                            right_kg=right_kg,
+                            limit_kg=aircraft.lateral_imbalance_limit_kg,
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
             else:
                 with charts_slot:
                     st.info("Assign all cargo items to view full flight envelope telemetry.")
@@ -842,10 +998,12 @@ def run_dashboard() -> None:
 
 def _render_manifest_tab() -> None:
     title_col, edit_col = st.columns([3, 1], vertical_alignment="center")
-    title_col.markdown("### Active cargo manifest")
-    if edit_col.button("Edit scenario data", icon=":material/edit:", use_container_width=True):
-        _open_scenario_editor()
-        st.rerun()
+    with title_col:
+        st.markdown("### Active cargo manifest")
+    with edit_col:
+        if st.button("Edit scenario data", icon=":material/edit:", use_container_width=True):
+            _open_scenario_editor()
+            st.rerun()
     st.dataframe(pd.DataFrame(normalise_rows(st.session_state["manifest_rows"])),
                  use_container_width=True, hide_index=True)
     st.download_button("Export manifest CSV", manifest_csv(st.session_state["manifest_rows"]),

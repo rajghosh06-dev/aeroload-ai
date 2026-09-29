@@ -39,7 +39,7 @@ AeroLoad-AI is structured into modular layers that separate the web presentation
                                      │
                                      ▼
                         [ ui/aircraft_view.py & charts.py ]
-                        (Visual Deck & Plotly Telemetry)
+                        (Visual Deck & Weight-and-Balance Charts)
 ```
 
 ---

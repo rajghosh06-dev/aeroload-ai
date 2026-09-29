@@ -1,10 +1,14 @@
-"""Streamlit orchestration for the dynamic AeroLoad operations console."""
+"""Streamlit orchestration for the AeroLoad-AI cargo weight-and-balance engine."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from html import escape
 import pandas as pd
 import streamlit as st
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
 
 try:
     from streamlit_sortables import sort_items
@@ -25,6 +29,8 @@ from ui.charts import cg_envelope_figure, lateral_balance_figure
 from ui.components import (
     render_aircraft_status,
     render_brand,
+    render_brand_and_aircraft,
+    render_info_banner,
     render_kpi_strip,
     render_status_pill,
     render_workflow_indicator,
@@ -59,9 +65,9 @@ from ui.templates import scenario_templates
 @st.cache_resource
 def load_project_data():
     return (
-        load_aircraft_from_json("data/aircraft.json"),
-        load_cargo_from_csv("data/sample_cargo.csv"),
-        load_hazard_rules("data/hazard_rules.json"),
+        load_aircraft_from_json(DATA_DIR / "aircraft.json"),
+        load_cargo_from_csv(DATA_DIR / "sample_cargo.csv"),
+        load_hazard_rules(DATA_DIR / "hazard_rules.json"),
     )
 
 
@@ -487,14 +493,12 @@ def run_dashboard() -> None:
     # TOP HEADER
     # -------------------------------------------------------------------------
     with st.container(key="app_header"):
-        brand_col, aircraft_col, scenario_col, docs_col, settings_col = st.columns(
-            [2.3, 1.2, 0.9, 0.8, 0.7],
+        brand_col, scenario_col, docs_col, settings_col = st.columns(
+            [2.6, 1.15, 1.15, 1.1],
             vertical_alignment="center",
         )
         with brand_col:
-            render_brand()
-        with aircraft_col:
-            render_aircraft_status(aircraft.name, aircraft.aircraft_id, len(aircraft.bays))
+            render_brand_and_aircraft(aircraft.name, aircraft.aircraft_id, len(aircraft.bays))
         with scenario_col:
             if st.button("Edit Scenario", icon=":material/edit_note:", width="stretch",
                          key="open_scenario_data"):
@@ -567,13 +571,18 @@ def run_dashboard() -> None:
     render_workflow_indicator(current_step)
 
     # -------------------------------------------------------------------------
-    # PLANNING MODE SELECTION (Phase 8E)
+    # PLANNING MODE SELECTION
     # -------------------------------------------------------------------------
-    st.markdown("<div class='section-label'>Planning & Operations Mode</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>Planning Mode</div>", unsafe_allow_html=True)
     mode_descriptions = {
-        "Auto Solve": "Let AeroLoad-AI generate a complete, balance-optimized loading plan.",
-        "Manual Planning": "Place cargo yourself and let AeroLoad-AI validate your plan.",
-        "AI-Assisted Planning": "Place cargo yourself while AeroLoad-AI shows legal and blocked bays.",
+        "Auto Solve": "Automatically creates and validates a complete cargo loading plan.",
+        "Manual Planning": "Place cargo into bays by hand with instant safety validation.",
+        "AI-Assisted Planning": "Interactive cargo placement with real-time legal bay guidance.",
+    }
+    mode_display_names = {
+        "Auto Solve": "Auto solve",
+        "Manual Planning": "Manual planning",
+        "AI-Assisted Planning": "Assisted planning",
     }
 
     mode_col, info_col = st.columns([2.0, 1.2], vertical_alignment="center")
@@ -581,29 +590,14 @@ def run_dashboard() -> None:
         planning_mode = st.radio(
             "Planning mode",
             ["Auto Solve", "Manual Planning", "AI-Assisted Planning"],
+            format_func=lambda m: mode_display_names.get(m, m),
             index=["Auto Solve", "Manual Planning", "AI-Assisted Planning"].index(planning_mode),
             horizontal=True,
             key="planning_mode",
             label_visibility="collapsed",
         )
     with info_col:
-        st.caption(f"💡 **{planning_mode}**: {mode_descriptions[planning_mode]}")
-
-    with st.expander("🎓 How AeroLoad-AI Solves This — AI Architecture & Pipeline", expanded=False):
-        st.markdown(
-            """
-**AeroLoad-AI** formulates aircraft cargo loading as a **Constraint Satisfaction Problem (CSP)** combined with **Local Search Optimization**, strictly adhering to classical AI foundations (Russell & Norvig, Units I–III):
-
-- **Knowledge Base**: Stores simplified cargo-hazard incompatibility relationships separately from the solver.
-- **CSP**: Models each cargo item as a variable and available bays as its domain.
-- **AC-3**: Removes unsupported bay values from CSP domains before search.
-- **MRV**: Selects the unassigned cargo having the fewest remaining legal bay choices (fail-first heuristic).
-- **LCV**: Orders bay choices so that remaining cargo retains as many options as possible (fail-last heuristic).
-- **Backtracking**: Tries assignments recursively and reverses decisions when a branch cannot produce a valid solution.
-- **Hill Climbing**: Improves a complete safe solution using valid MOVE and SWAP neighboring assignments.
-- **Explainability**: Converts constraint and optimization results into human-readable reasons.
-            """
-        )
+        st.caption(mode_descriptions[planning_mode])
 
     current_csp = AeroLoadCSP(aircraft=aircraft, cargo_items=cargo_items, knowledge_base=knowledge)
     workspace_slot = st.container()
@@ -614,10 +608,8 @@ def run_dashboard() -> None:
     # WORKSPACE RENDERING BY MODE
     # =========================================================================
     with workspace_slot:
-        st.markdown("<div class='section-label'>Aircraft load workspace</div>", unsafe_allow_html=True)
-
         if not cargo_items:
-            st.info("No cargo has been added yet. Click 'Edit Scenario' in the header or import a CSV to begin.")
+            render_info_banner("No cargo has been added yet. Click 'Edit Scenario' in the header or import a CSV to begin.")
 
         # ---------------------------------------------------------------------
         # MODE 1: AUTO SOLVE (Phase 8I)
@@ -634,26 +626,30 @@ def run_dashboard() -> None:
 
             with control_col:
                 with st.container(border=True):
-                    st.markdown("### Autonomous Solver")
-                    render_status_pill("Pre-Solve", "Ready" if not all_errors and cargo_items else "Blocked")
-                    st.caption("AC-3 domain pruning · MRV/LCV search · safety validation · local optimization")
+                    st.markdown("### Generate load plan")
+                    if not all_errors and cargo_items:
+                        st.caption(":green[● Ready to generate a loading plan.]")
+                    else:
+                        st.caption(":red[● Solver blocked — check constraints or add cargo.]")
                     for error in config_errors:
                         st.error(error)
                     if not result_is_current and stored_result is not None:
-                        st.warning("Inputs changed. Run the solver again to refresh the plan.")
+                        st.warning("Inputs changed. Run planner to update results.")
                     if not cargo_items:
-                        st.caption("Add at least one cargo item to run the solver.")
+                        st.caption("Add at least one cargo item to run planner.")
+                    st.caption(
+                        f"Optimization: {'Enabled' if st.session_state['enable_optimization'] else 'Disabled'} · "
+                        f"Iterations: {st.session_state['optimization_iterations']}"
+                    )
                     run_solver = st.button(
-                        "Run AeroLoad-AI",
+                        "Generate plan",
                         type="primary",
                         width="stretch",
                         disabled=bool(all_errors) or not cargo_items,
                         icon=":material/flight_takeoff:",
                     )
-                    st.caption(
-                        f"Optimization {'enabled' if st.session_state['enable_optimization'] else 'disabled'} · "
-                        f"{st.session_state['optimization_iterations']} max iterations"
-                    )
+                    with st.expander("Solver details", expanded=False):
+                        st.caption("Algorithm: AC-3 domain pruning · MRV/LCV backtracking search · Hill-climbing local search.")
 
                 if run_solver:
                     with st.spinner("Solving placement, validating safety and evaluating balance..."):
@@ -678,19 +674,20 @@ def run_dashboard() -> None:
 
                 # 1. Answer banner
                 if safety_report.safe:
-                    st.success("✓ Safe loading plan found — passes AeroLoad-AI simulation safety checks (structural, balance and hazard constraints satisfied).", icon=":material/check_circle:")
+                    st.success("Plan generated successfully — all structural, balance, and separation constraints satisfied.", icon=":material/check_circle:")
                 else:
-                    st.error("✕ Plan violates aircraft constraints.", icon=":material/error:")
+                    st.error("Constraint violations detected — review issues below.", icon=":material/error:")
 
                 # 2. Key metrics in a clean row
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Payload", f"{safety_report.total_payload_kg:,.0f} / {aircraft.max_payload_kg:,.0f} kg")
-                m2.metric("Final CG", f"{safety_report.cg_m:+.3f} m")
-                m3.metric("Target CG", f"{aircraft.target_cg_m:+.2f} m")
-                m4.metric("Lateral Imbalance", f"{safety_report.lateral_imbalance_kg:,.0f} kg",
+                m2.metric("Final CG", f"{safety_report.cg_m:+.3f} m", f"Target: {aircraft.target_cg_m:+.2f} m")
+                cg_in_envelope = aircraft.cg_min_m <= safety_report.cg_m <= aircraft.cg_max_m
+                m3.metric("CG Status", "Within envelope" if cg_in_envelope else "Outside envelope")
+                m4.metric("Lateral Balance", f"{safety_report.lateral_imbalance_kg:,.0f} kg imbalance",
                           f"Limit: {aircraft.lateral_imbalance_limit_kg:,.0f} kg")
 
-                # 3. CG and balance telemetry charts
+                # 3. CG and balance weight charts
                 with charts_slot:
                     cg_col, lateral_col = st.columns(2)
                     cg_col.plotly_chart(
@@ -718,7 +715,7 @@ def run_dashboard() -> None:
                 assignment_frame = _assignment_frame(current_csp, result.final_assignment)
                 with tabs_slot:
                     load_tab, safety_tab, optimization_tab, audit_tab, manifest_tab = st.tabs(
-                        ["Load Plan Table", "Safety Checks", "Optimization Details", "AI Solver Audit", "Manifest"]
+                        ["Load plan", "Safety", "Optimization", "Solver details", "Manifest"]
                     )
                     with load_tab:
                         st.markdown("#### Aircraft Bay Assignments")
@@ -741,13 +738,13 @@ def run_dashboard() -> None:
                                 elif item.status == "FAIL":
                                     st.error(message)
                                 else:
-                                    st.info(message)
+                                    render_info_banner(message)
 
                     with optimization_tab:
                         st.markdown("#### Hill-Climbing Local Search")
                         optimization = result.optimization_result
                         if optimization is None:
-                            st.info("Optimization was disabled for this run.")
+                            render_info_banner("Optimization was disabled for this run.")
                         else:
                             o1, o2, o3, o4 = st.columns(4)
                             o1.metric("Initial score", f"{optimization.initial_quality.score:.4f}")
@@ -760,7 +757,7 @@ def run_dashboard() -> None:
                                     st.write(step.description)
                                     st.caption(f"Score {step.score_before:.4f} → {step.score_after:.4f} · CG {step.cg_before_m:+.3f} → {step.cg_after_m:+.3f} m")
                             if not optimization.steps:
-                                st.info("The initial feasible solution was already a local optimum.")
+                                render_info_banner("The initial feasible solution was already a local optimum.")
 
                     with audit_tab:
                         st.markdown("#### Search & Propagation Statistics")
@@ -775,9 +772,7 @@ def run_dashboard() -> None:
                         _render_manifest_tab()
             else:
                 with charts_slot:
-                    st.info("Run AeroLoad-AI to generate live Center of Gravity and lateral balance telemetry.")
-                with tabs_slot:
-                    _render_fallback_tabs()
+                    render_info_banner("No plan generated yet. Generate a plan or place cargo manually.")
 
         # ---------------------------------------------------------------------
         # MODE 2: MANUAL PLANNING (Phase 8G)
@@ -855,7 +850,7 @@ def run_dashboard() -> None:
                         for violation in manual_status.violations:
                             st.error(violation)
 
-            # Telemetry for complete manual plan
+            # Balance charts for complete manual plan
             if manual_status.is_complete and manual_status.safety_report:
                 assignments = assignment_to_cargo_assignments(current_csp, manual_assignments)
                 left_kg, right_kg = calculate_side_weights(assignments)
@@ -885,9 +880,9 @@ def run_dashboard() -> None:
                 with charts_slot:
                     remaining_count = manual_status.total_count - manual_status.assigned_count
                     if remaining_count > 0:
-                        st.info(f"{remaining_count} cargo item{'s' if remaining_count != 1 else ''} still require placement to view full flight envelope telemetry.")
+                        render_info_banner(f"{remaining_count} cargo item{'s' if remaining_count != 1 else ''} still to place. Assign all cargo items to calculate balance results.")
                     else:
-                        st.info("Assign all cargo items to view full flight envelope telemetry.")
+                        render_info_banner("Assign all cargo items to calculate balance results.")
 
         # ---------------------------------------------------------------------
         # MODE 3: AI-ASSISTED PLANNING (Phase 8H)
@@ -926,12 +921,15 @@ def run_dashboard() -> None:
             with control_col:
                 if selected_cargo and domain_analysis:
                     with st.container(border=True):
-                        st.markdown(f"### AI Guidance · `{selected_cargo.cargo_id}`")
-                        st.write(f"**{selected_cargo.name}** · {selected_cargo.weight_kg:,.0f} kg")
-                        st.caption(f"Category: {selected_cargo.category.value} · Hazard: {selected_cargo.hazard_class.value}")
+                        st.markdown(f"### Bay Guidance · `{selected_cargo.cargo_id}`")
+                        legal_count = len(domain_analysis.legal_bays)
+                        blocked_count = len(domain_analysis.blocked_bays)
+                        occupied_count = sum(1 for opt in domain_analysis.bay_options.values() if opt.status == BayOptionStatus.OCCUPIED)
+                        st.write(f"**{selected_cargo.name}** ({selected_cargo.hazard_class.value}, {selected_cargo.weight_kg:,.0f} kg)")
+                        st.caption(f"{legal_count} legal bay{'s' if legal_count != 1 else ''} · {blocked_count} blocked · {occupied_count} occupied")
 
                         if domain_analysis.legal_bays:
-                            st.caption("Click a legal bay to place this cargo:")
+                            st.caption("Place into a legal bay:")
                             btn_cols = st.columns(min(len(domain_analysis.legal_bays), 4))
                             for i, b_id in enumerate(domain_analysis.legal_bays):
                                 col = btn_cols[i % len(btn_cols)]
@@ -956,7 +954,7 @@ def run_dashboard() -> None:
                             st.rerun()
 
                     # Progressive disclosure: technical CSP expander
-                    with st.expander("🎓 Show CSP Domain Explanation", expanded=st.session_state.get("show_technical_details", False)):
+                    with st.expander(f"Show CSP Domain Details: D({selected_cargo.cargo_id})", expanded=st.session_state.get("show_technical_details", False)):
                         st.markdown(f"**Variable:** $X_{{{selected_cargo.cargo_id}}}$")
                         legal_str = ", ".join(domain_analysis.legal_bays) if domain_analysis.legal_bays else "\\emptyset"
                         st.markdown(f"**Current Legal Domain:** $$D(X_{{{selected_cargo.cargo_id}}}) = \\{{ {legal_str} \\}}$$")
@@ -1015,7 +1013,23 @@ def run_dashboard() -> None:
                     )
             else:
                 with charts_slot:
-                    st.info("Assign all cargo items to view full flight envelope telemetry.")
+                    render_info_banner("Assign all cargo items to calculate balance results.")
+
+    with st.expander("Algorithm Details — CSP & Local Search Formulation", expanded=False):
+        st.markdown(
+            """
+**AeroLoad-AI** formulates aircraft cargo loading as a **Constraint Satisfaction Problem (CSP)** combined with **Local Search Optimization**, strictly adhering to classical AI foundations (Russell & Norvig, Units I–III):
+
+- **Knowledge Base**: Stores simplified cargo-hazard incompatibility relationships separately from the solver.
+- **CSP**: Models each cargo item as a variable and available bays as its domain.
+- **AC-3**: Removes unsupported bay values from CSP domains before search.
+- **MRV**: Selects the unassigned cargo having the fewest remaining legal bay choices (fail-first heuristic).
+- **LCV**: Orders bay choices so that remaining cargo retains as many options as possible (fail-last heuristic).
+- **Backtracking**: Tries assignments recursively and reverses decisions when a branch cannot produce a valid solution.
+- **Hill Climbing**: Improves a complete safe solution using valid MOVE and SWAP neighboring assignments.
+- **Explainability**: Converts constraint and optimization results into human-readable reasons.
+            """
+        )
 
     st.divider()
     st.caption("AeroLoad-AI is an educational simulation project. Aircraft parameters and hazardous-material rules are simplified for academic demonstration and must not be used for real-world flight dispatch or dangerous-goods compliance.")
@@ -1033,19 +1047,3 @@ def _render_manifest_tab() -> None:
                  width="stretch", hide_index=True)
     st.download_button("Export manifest CSV", manifest_csv(st.session_state["manifest_rows"]),
                        "aeroload_manifest.csv", "text/csv")
-
-
-def _render_fallback_tabs() -> None:
-    load_tab, safety_tab, optimization_tab, audit_tab, manifest_tab = st.tabs(
-        ["Load Plan", "Safety & Hazmat", "Optimization", "AI Solver Audit", "Manifest"]
-    )
-    with load_tab:
-        st.info("No current load plan. Run the solver from the aircraft workspace.")
-    with safety_tab:
-        st.info("Safety and hazmat checks appear after a successful run.")
-    with optimization_tab:
-        st.info("Optimization metrics appear after a successful run.")
-    with audit_tab:
-        st.info("Solver audit statistics appear after a successful run.")
-    with manifest_tab:
-        _render_manifest_tab()

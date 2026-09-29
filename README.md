@@ -2,7 +2,7 @@
 
 > **Academic Project**: B.Tech 3rd Year, 1st Semester — Artificial Intelligence Project-Based Learning (AI-PBL)  
 > **Curriculum Alignment**: Russell & Norvig, *Artificial Intelligence: A Modern Approach* (Units I, II, III)  
-> **Test Suite**: 125 Automated Tests Passing (100% Pass Rate)
+> **Test Suite**: 127 Automated Tests Passing (100% Pass Rate)
 
 ---
 
@@ -110,7 +110,7 @@ The AeroLoad-AI engine operates as a deterministic, multi-stage reasoning pipeli
                                          |
                                          v
                   +----------------------------------------------+
-                  |   STAGE 6: EXPLAINABILITY & TELEMETRY UI     |
+                  |  STAGE 6: EXPLAINABILITY & VISUALIZATION UI  |
                   |  - Natural language pass/fail audit report   |
                   |  - Real-time Plotly CG & balance envelopes   |
                   |  - Interactive 3-mode Operations Console     |
@@ -280,7 +280,7 @@ The user interface provides three distinct operational modes:
 - **Workflow**: Selecting any cargo item displays its live CSP domain:
   $$D(X_{\text{cargo}}) = \{ \text{candidate bays} \}$$
   The interactive cargo deck highlights:
-  - **`✓ LEGAL CHOICE`** (Green/Cyan): Bays that satisfy all unary and binary constraints.
+  - **`✓ LEGAL CHOICE`** (Sage Green): Bays that satisfy all unary and binary constraints.
   - **`✕ INCOMPATIBLE`** (Red): Bays blocked with specific violation reasons (e.g., *"Adjacent to P2 (Lithium Battery) in B1"*).
   - **`OCCUPIED`** (Muted): Bays already assigned.
 
@@ -334,7 +334,7 @@ aeroLoad-ai/
 │   ├── styles.py               # Custom CSS design system
 │   ├── templates.py            # Pre-configured scenario templates
 │   └── theme.py                # Color palette and theme tokens
-└── tests/                      # Automated test suite (125 tests)
+└── tests/                      # Automated test suite (127 tests)
     ├── test_ac3.py             # AC-3 algorithm verification
     ├── test_aircraft.py        # Aircraft loader and envelope tests
     ├── test_benchmark.py       # Performance and scalability tests
@@ -384,19 +384,30 @@ pip install -r requirements.txt
 ```powershell
 conda run -n aeroload python -m pytest -q
 ```
-*(All 125 tests should pass in under 2 seconds)*
+*(All 127 tests should pass in under 2 seconds)*
 
-### Step 5: Launch the Streamlit Dashboard
+### Step 5: Launch the Streamlit Dashboard (Local)
 ```powershell
 conda run -n aeroload streamlit run app.py
 ```
 Open your browser at `http://localhost:8501` (or the URL displayed in the terminal).
 
+### Deployment (Streamlit Community Cloud)
+
+AeroLoad-AI is architected for direct deployment via [Streamlit Community Cloud](https://streamlit.io/cloud) from GitHub:
+
+1. Connect your GitHub account to Streamlit Community Cloud.
+2. Select repository: `rajghosh06-dev/aeroload-ai` (Branch: `main`).
+3. Set the Main file path to: `app.py`.
+4. Ensure Python version is set to `3.12`.
+5. Dependencies are installed automatically from `requirements.txt`.
+6. No environment variables or external database secrets are required.
+
 ---
 
 ## 12. Automated Verification & Test Suite
 
-The test suite covers the entire system with **125 automated unit, integration, and regression tests**:
+The test suite covers the entire system with **127 automated unit, integration, and regression tests**:
 
 | Test Module | Coverage Area |
 | :--- | :--- |
@@ -436,7 +447,7 @@ conda run -n aeroload python -m pytest -v
    - AC-3 pre-prunes unviable bays.
    - Backtracking search finds a safe solution in $<10$ ms.
    - Hill-climbing local search performs MOVE and SWAP operations to optimize the balance score.
-   - Telemetry displays live Plotly figures for the CG envelope and lateral balance.
+   - Plots display interactive figures for the CG envelope and lateral balance.
 
 ### Scenario B: Hazardous Materials Segregation (AI-Assisted Mode)
 1. Load the **"Hazardous Incompatible"** scenario (contains Lithium Batteries and Flammable Liquids).
@@ -453,7 +464,7 @@ conda run -n aeroload python -m pytest -v
 3. Observe the immediate feedback:
    - System flags the configuration as violating constraints.
    - Violations list shows: *"CG out of limits"*.
-   - Live telemetry shows the CG marker outside the permitted envelope.
+   - Weight-and-balance charts show the CG marker outside the permitted envelope.
 
 ---
 

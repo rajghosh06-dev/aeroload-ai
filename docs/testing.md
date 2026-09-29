@@ -2,7 +2,7 @@
 
 AeroLoad-AI is rigorously tested using the **Pytest** framework.
 
-The test suite contains **125 automated unit, integration, and end-to-end regression tests**, providing 100% pass-rate confidence across the AI algorithms, physical calculations, and user-state lifecycles.
+The test suite contains **127 automated unit, integration, and end-to-end regression tests**, providing 100% pass-rate confidence across the AI algorithms, physical calculations, and user-state lifecycles.
 
 ---
 
@@ -14,7 +14,7 @@ Execute the following command from the project root:
 conda run -n aeroload python -m pytest -v
 ```
 
-All 125 tests complete in under 2 seconds.
+All 127 tests complete in under 2 seconds.
 
 ---
 

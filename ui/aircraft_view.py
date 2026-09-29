@@ -1,4 +1,4 @@
-"""Visual aircraft-deck and CG-envelope components."""
+"""Visual aircraft-deck and CG-envelope components for light engineering interface."""
 
 from __future__ import annotations
 
@@ -31,8 +31,7 @@ def render_aircraft_layout(
     bay_options: dict[str, BayOption] | None = None,
 ) -> None:
     """
-    Render a two-sided cargo deck supporting Auto, Manual, and AI-Assisted modes.
-    Uses native st.html to prevent Markdown parsing quirks.
+    Render a clean two-sided cargo deck diagram on a light engineering surface.
     """
     bay_to_cargo = {bay_id: cargo_id for cargo_id, bay_id in assignment.items()}
     side_order = {"Left": 0, "Center": 1, "Right": 2}
@@ -56,8 +55,8 @@ def render_aircraft_layout(
                         f"<article class='deck-bay is-empty bay-legal'>"
                         f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                         f"<strong>Available</strong>"
-                        f"<small>{bay.longitudinal_arm_m:+.1f} m arm · {bay.max_weight_kg:.0f} kg capacity</small>"
-                        f"<span class='bay-guidance-badge guidance-legal'>✓ LEGAL CHOICE</span>"
+                        f"<small>{bay.max_weight_kg:.0f} kg capacity · Arm {bay.longitudinal_arm_m:+.1f} m</small>"
+                        f"<span class='bay-guidance-badge guidance-legal'>Legal</span>"
                         f"</article>"
                     )
                 elif opt.status == BayOptionStatus.ILLEGAL:
@@ -66,7 +65,7 @@ def render_aircraft_layout(
                         f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                         f"<strong>Blocked</strong>"
                         f"<small>{escape(opt.reason)}</small>"
-                        f"<span class='bay-guidance-badge guidance-illegal'>✕ INCOMPATIBLE</span>"
+                        f"<span class='bay-guidance-badge guidance-illegal'>Blocked</span>"
                         f"</article>"
                     )
                 else:
@@ -75,7 +74,7 @@ def render_aircraft_layout(
                         f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                         f"<strong>Occupied</strong>"
                         f"<small>{escape(opt.reason)}</small>"
-                        f"<span class='bay-guidance-badge guidance-occupied'>OCCUPIED</span>"
+                        f"<span class='bay-guidance-badge guidance-occupied'>Occupied</span>"
                         f"</article>"
                     )
             else:
@@ -83,7 +82,7 @@ def render_aircraft_layout(
                     f"<article class='deck-bay is-empty'>"
                     f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                     f"<strong>Available</strong>"
-                    f"<small>{bay.longitudinal_arm_m:+.1f} m arm · {bay.max_weight_kg:.0f} kg capacity</small>"
+                    f"<small>{bay.max_weight_kg:.0f} kg capacity · Arm {bay.longitudinal_arm_m:+.1f} m</small>"
                     f"</article>"
                 )
             cards_by_row.setdefault(bay.row, []).append(card)
@@ -100,8 +99,8 @@ def render_aircraft_layout(
                 f"<article class='deck-bay bay-assigned-current bay-{_cargo_tone(cargo.hazard_class.value)}'>"
                 f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                 f"<strong>{escape(cargo.cargo_id)}</strong><span>{escape(cargo.name)}</span>"
-                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% bay use</small>"
-                f"<span class='bay-guidance-badge guidance-legal'>CURRENT ASSIGNMENT</span>"
+                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% cap</small>"
+                f"<span class='bay-guidance-badge guidance-selected'>Selected</span>"
                 f"<em>{escape(cargo.hazard_class.value)}</em>"
                 f"</article>"
             )
@@ -110,62 +109,62 @@ def render_aircraft_layout(
                 f"<article class='deck-bay bay-occupied bay-{_cargo_tone(cargo.hazard_class.value)}'>"
                 f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                 f"<strong>{escape(cargo.cargo_id)}</strong><span>{escape(cargo.name)}</span>"
-                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% bay use</small>"
-                f"<span class='bay-guidance-badge guidance-occupied'>Occupied by {escape(cargo.cargo_id)}</span>"
+                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% cap</small>"
+                f"<span class='bay-guidance-badge guidance-occupied'>Occupied ({escape(cargo.cargo_id)})</span>"
                 f"<em>{escape(cargo.hazard_class.value)}</em>"
                 f"</article>"
             )
         else:
             card = (
-                f"<article class='deck-bay bay-{_cargo_tone(cargo.hazard_class.value)}'>"
+                f"<article class='deck-bay bay-occupied bay-{_cargo_tone(cargo.hazard_class.value)}'>"
                 f"<header><span>{escape(bay.bay_id)}</span><i>{escape(bay.side.value)}</i></header>"
                 f"<strong>{escape(cargo.cargo_id)}</strong><span>{escape(cargo.name)}</span>"
-                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% bay use</small>"
+                f"<small>{cargo.weight_kg:.0f} kg · {utilization:.0f}% cap</small>"
                 f"<em>{escape(cargo.hazard_class.value)}</em>"
                 f"</article>"
             )
         cards_by_row.setdefault(bay.row, []).append(card)
 
     deck_rows = "".join(
-        f"<section class='deck-row'><div class='deck-row-label'>ROW {row}</div>"
+        f"<section class='deck-row'><div class='deck-row-label'>Row {row}</div>"
         f"<div class='deck-row-bays'>{''.join(cards_by_row[row])}</div></section>"
         for row in sorted(cards_by_row)
     )
 
     if mode == "AUTO":
-        eyebrow = "Live placement map · Auto Solver Plan"
+        eyebrow = "Aircraft load plan · Auto solve"
     elif mode == "MANUAL":
-        eyebrow = "Interactive Deck · Manual Placement"
+        eyebrow = "Aircraft load plan · Manual placement"
     else:
         if selected_cargo_id:
-            eyebrow = f"AI-Assisted Domain Guidance · Candidate Bays for {escape(selected_cargo_id)}"
+            eyebrow = f"Assisted planning · Available bays for {escape(selected_cargo_id)}"
         else:
-            eyebrow = "AI-Assisted Planning · Select Cargo to Inspect CSP Domain"
+            eyebrow = "Assisted planning · Select cargo to inspect bay availability"
 
     legend_html = (
         "<div class='deck-legend'>"
-        "<span class='legend-general'></span>General "
-        "<span class='legend-warning'></span>Controlled "
-        "<span class='legend-danger'></span>Hazardous"
+        "<span class='legend-item'><span class='legend-general'></span>General</span>"
+        "<span class='legend-item'><span class='legend-warning'></span>Controlled</span>"
+        "<span class='legend-item'><span class='legend-danger'></span>Hazardous</span>"
         "</div>"
     )
     if mode == "AI_ASSISTED":
         legend_html = (
             "<div class='deck-legend'>"
-            "<span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin:0 4px 0 10px;'></span>Legal "
-            "<span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin:0 4px 0 10px;'></span>Blocked "
-            "<span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#64748b;margin:0 4px 0 10px;'></span>Occupied"
+            "<span class='legend-item'><span class='legend-legal'></span>Legal</span>"
+            "<span class='legend-item'><span class='legend-blocked'></span>Blocked</span>"
+            "<span class='legend-item'><span class='legend-occupied'></span>Occupied</span>"
             "</div>"
         )
 
     st.html(
         "<section class='deck-shell'>"
-        f"<div class='deck-heading'><div><div class='eyebrow'>{eyebrow}</div>"
-        f"<h3>{escape(csp.aircraft.name)} cargo deck</h3></div>{legend_html}</div>"
+        f"<div class='deck-heading'><div><div class='deck-eyebrow'>{eyebrow}</div>"
+        f"<h3>{escape(csp.aircraft.name)} Cargo Deck</h3></div>{legend_html}</div>"
         "<div class='direction forward'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='m12 4 6 8h-4v8h-4v-8H6z'/></svg>Forward</div>"
         "<div class='fuselage'><div class='centerline'></div>"
         f"<div class='deck-grid'>{deck_rows}</div></div>"
-        "<div class='direction'><svg class='direction-aft' viewBox='0 0 24 24' aria-hidden='true'><path d='m12 4 6 8h-4v8h-4v-8H6z'/></svg>Aft</div>"
+        "<div class='direction aft'><svg class='direction-aft' viewBox='0 0 24 24' aria-hidden='true'><path d='m12 4 6 8h-4v8h-4v-8H6z'/></svg>Aft</div>"
         "</section>"
     )
 
@@ -176,14 +175,14 @@ def render_cg_envelope(
     cg_max_m: float,
     target_m: float,
 ) -> None:
-    """Render CG position within its operating envelope."""
+    """Render CG position within its operating envelope using light engineering styling."""
     span = max(cg_max_m - cg_min_m, 0.001)
     marker = min(100, max(0, (cg_m - cg_min_m) / span * 100))
     target = min(100, max(0, (target_m - cg_min_m) / span * 100))
     status = "Within envelope" if cg_min_m <= cg_m <= cg_max_m else "Outside envelope"
     tone = "safe" if status == "Within envelope" else "danger"
     st.html(
-        "<section class='cg-card'><div class='cg-heading'><div><div class='eyebrow'>Longitudinal stability</div><h3>CG envelope</h3></div>"
+        "<section class='cg-card'><div class='cg-heading'><div><div class='deck-eyebrow'>Longitudinal stability</div><h3>CG Envelope</h3></div>"
         f"<div class='cg-reading cg-{tone}'>{cg_m:+.3f} m <span>{status}</span></div></div><div class='cg-scale'><div class='cg-safe-band'></div>"
         f"<div class='cg-target' style='left:{target:.2f}%'><i></i><span>Target</span></div><div class='cg-marker cg-{tone}' style='left:{marker:.2f}%'><i></i><span>Current</span></div></div>"
         f"<div class='cg-labels'><span>{cg_min_m:+.1f} m limit</span><span>{target_m:+.1f} m target</span><span>{cg_max_m:+.1f} m limit</span></div></section>"

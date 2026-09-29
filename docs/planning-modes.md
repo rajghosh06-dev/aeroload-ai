@@ -18,7 +18,7 @@ AeroLoad-AI offers three planning modes tailored for different use cases and lea
 3. Executes **Backtracking Search with MRV and LCV heuristics** to find a safe feasible assignment.
 4. Validates the complete plan against aircraft payload, CG, and lateral balance limits.
 5. If enabled in Settings, runs **Hill-Climbing Local Search** with `MOVE` and `SWAP` operators to align the CG with the Target CG.
-6. Generates human-readable explainability reports and Plotly telemetry charts.
+6. Generates human-readable explainability reports and weight-and-balance charts.
 
 ---
 
@@ -55,7 +55,7 @@ AeroLoad-AI offers three planning modes tailored for different use cases and lea
 ### How It Works
 1. Select any cargo item to inspect.
 2. The aircraft cargo deck updates visually:
-   - **Available / Legal** (Green/Cyan): The bay satisfies all capacity and hazard constraints.
+   - **Available / Legal** (Sage Green): The bay satisfies all capacity and hazard constraints.
    - **Blocked** (Red): The bay violates a constraint, with an explicit reason displayed (e.g., *Adjacent to P2 (Lithium Battery) in B1*).
    - **Occupied** (Muted): The bay already contains another cargo package.
 3. Click any legal bay button to place the cargo item directly.

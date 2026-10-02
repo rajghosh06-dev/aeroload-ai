@@ -2,7 +2,7 @@
 
 > **Academic Project**: B.Tech 3rd Year, 1st Semester — Artificial Intelligence Project-Based Learning (AI-PBL)  
 > **Curriculum Alignment**: Russell & Norvig, *Artificial Intelligence: A Modern Approach* (Units I, II, III)  
-> **Test Suite**: 127 Automated Tests Passing (100% Pass Rate)
+> **Verification**: Locally validated with a 127-test automated regression suite (100% pass rate). The development test suite is maintained locally and is excluded from the public deployment repository.
 
 ---
 
@@ -18,7 +18,7 @@
 9. [Operations Console & Interaction Modes](#9-operations-console--interaction-modes)
 10. [Repository Structure](#10-repository-structure)
 11. [Installation & Quickstart Guide](#11-installation--quickstart-guide)
-12. [Automated Verification & Test Suite](#12-automated-verification--test-suite)
+12. [Development Verification & Testing](#12-development-verification--testing)
 13. [Demonstration Workflows & Scenarios](#13-demonstration-workflows--scenarios)
 14. [Faculty Demo Script & Viva Voce Q&A](#14-faculty-demo-script--viva-voce-qa)
 15. [Real-World vs. Simulation Simplifications](#15-real-world-vs-simulation-simplifications)
@@ -323,37 +323,21 @@ aeroLoad-ai/
 │   ├── models.py               # Shared dataclasses and enumerations
 │   ├── optimization.py         # Solution quality score calculation
 │   └── pipeline.py             # Unified end-to-end analysis pipeline
-├── ui/                         # Streamlit presentation and components
-│   ├── aircraft_view.py        # Visual aircraft cargo deck renderer
-│   ├── charts.py               # Plotly CG and lateral balance charts
-│   ├── components.py           # Native HTML cards, KPIs, and badges
-│   ├── dashboard.py            # Primary operations console dashboard
-│   ├── docs.py                 # In-app documentation browser
-│   ├── planning.py             # Manual and AI-assisted planning logic
-│   ├── state.py                # Streamlit session state management
-│   ├── styles.py               # Custom CSS design system
-│   ├── templates.py            # Pre-configured scenario templates
-│   └── theme.py                # Color palette and theme tokens
-└── tests/                      # Automated test suite (127 tests)
-    ├── test_ac3.py             # AC-3 algorithm verification
-    ├── test_aircraft.py        # Aircraft loader and envelope tests
-    ├── test_benchmark.py       # Performance and scalability tests
-    ├── test_cargo.py           # Cargo parsing and validation tests
-    ├── test_cg.py              # Physics formulas, moments, and balance tests
-    ├── test_constraints.py     # Constraint violation tests
-    ├── test_csp.py             # CSP initialization and domain tests
-    ├── test_end_to_end.py      # End-to-end pipeline integration tests
-    ├── test_explainability.py  # XAI explanation generation tests
-    ├── test_heuristics.py      # MRV and LCV heuristic tests
-    ├── test_knowledge_base.py  # Hazard KB query tests
-    ├── test_local_search.py    # Hill-climbing optimizer tests
-    ├── test_models.py          # Data model serialization tests
-    ├── test_optimization.py    # Optimization score tracking tests
-    ├── test_pipeline.py        # Analysis pipeline tests
-    ├── test_planning.py        # Manual and AI-assisted planning tests
-    ├── test_solver.py          # Backtracking search tests
-    └── test_ui_state.py        # Session state and template tests
+└── ui/                         # Streamlit presentation and components
+    ├── aircraft_view.py        # Visual aircraft cargo deck renderer
+    ├── charts.py               # Plotly CG and lateral balance charts
+    ├── components.py           # Native HTML cards, KPIs, and badges
+    ├── dashboard.py            # Primary operations console dashboard
+    ├── docs.py                 # In-app documentation browser
+    ├── planning.py             # Manual and AI-assisted planning logic
+    ├── presentation.py         # Academic presentation viewer
+    ├── state.py                # Streamlit session state management
+    ├── styles.py               # Custom CSS design system
+    ├── templates.py            # Pre-configured scenario templates
+    └── theme.py                # Color palette and theme tokens
 ```
+
+> *Note*: Local development additionally includes a `tests/` directory with the project's automated verification suite; it is intentionally excluded from the public deployment repository.
 
 ---
 
@@ -380,13 +364,7 @@ conda activate aeroload
 pip install -r requirements.txt
 ```
 
-### Step 4: Run Automated Tests
-```powershell
-conda run -n aeroload python -m pytest -q
-```
-*(All 127 tests should pass in under 2 seconds)*
-
-### Step 5: Launch the Streamlit Dashboard (Local)
+### Step 4: Launch the Streamlit Dashboard (Local)
 ```powershell
 conda run -n aeroload streamlit run app.py
 ```
@@ -405,35 +383,30 @@ AeroLoad-AI is architected for direct deployment via [Streamlit Community Cloud]
 
 ---
 
-## 12. Automated Verification & Test Suite
+## 12. Development Verification & Testing
 
-The test suite covers the entire system with **127 automated unit, integration, and regression tests**:
+AeroLoad-AI has been locally validated against **127 automated unit, integration, and regression tests** (100% pass rate). The development test suite is maintained locally by the project developer and is intentionally excluded from the public deployment repository.
 
-| Test Module | Coverage Area |
+### Verification Categories & Coverage
+
+| Functional Area | Scope & Coverage Description |
 | :--- | :--- |
-| `test_ac3.py` | AC-3 arc consistency and domain reduction |
-| `test_aircraft.py` | Aircraft data models and JSON loading |
-| `test_benchmark.py` | Performance, runtime, and node counts |
-| `test_cargo.py` | Cargo models and CSV parsing |
-| `test_cg.py` | Physics formulas, moments, and lateral balance |
-| `test_constraints.py` | Hard safety constraints and report generator |
-| `test_csp.py` | CSP variables, domains, and unary filtering |
-| `test_end_to_end.py` | Integrated pipeline execution |
-| `test_explainability.py`| Natural language XAI report generation |
-| `test_heuristics.py` | MRV variable and LCV value ordering |
-| `test_knowledge_base.py`| Hazard rule logic and symmetric queries |
-| `test_local_search.py` | Hill-climbing, MOVE and SWAP neighbors |
-| `test_models.py` | Enums and data structures |
-| `test_optimization.py` | Solution quality score calculation |
-| `test_pipeline.py` | Full solver pipeline coordination |
-| `test_planning.py` | Manual planning, AI-assistance, and domain cards |
-| `test_solver.py` | Backtracking search with MRV and LCV |
-| `test_ui_state.py` | Session state, manifest rows, and scenario loading |
+| **CSP & Arc Consistency** | AC-3 arc queue initialization, revision logic, domain value pruning, and wipeout detection |
+| **Search Heuristics & Backtracking** | MRV fail-first variable selection, LCV value ordering, backtracks count tracking |
+| **Local Search & Optimization** | Best-improvement hill climbing, MOVE and SWAP neighborhood generation, trim scoring |
+| **Physical & Flight Mechanics** | Total payload, longitudinal moments, center of gravity equation, and lateral port/starboard balance |
+| **Safety & Incompatibility Rules** | Physical bay weight caps, hazardous material adjacency rules, and symmetric query resolution |
+| **Explainability (XAI)** | Natural-language explanation generation for bay capacity, hazard separation, and balance trade-offs |
+| **Operations & Planning Modes** | Manual cargo placement validation, AI-assisted domain analysis, and scenario draft state |
+| **End-to-End Pipeline & Benchmarks** | Full solver pipeline coordination, benchmark execution (<10 ms), data serialisation |
 
-To run the complete test suite:
+### Local Developer Verification Command
+
+For local development environments where the verification suite is present:
 ```powershell
-conda run -n aeroload python -m pytest -v
+conda run -n aeroload python -m pytest -q
 ```
+*(All 127 automated tests pass locally in under 1 second)*
 
 ---
 

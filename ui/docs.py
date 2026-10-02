@@ -19,7 +19,7 @@ DOCUMENTATION_TOPICS: list[tuple[str, str, str]] = [
     ("planning-modes.md", "Planning Modes", "Auto Solve, Manual & AI-Assisted guidance"),
     ("knowledge-base.md", "Knowledge Base", "Simplified hazard rules & frozenset reasoning"),
     ("architecture.md", "Architecture", "System data flow & module map"),
-    ("testing.md", "Testing", "Pytest suite & verification coverage"),
+    ("testing.md", "Testing", "Verification methodology & coverage"),
     ("limitations.md", "Limitations", "Academic scope & modeling simplifications"),
     ("presentation", "Presentation", "Academic slide deck & project overview"),
 ]

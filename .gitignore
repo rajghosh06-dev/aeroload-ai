@@ -17,6 +17,8 @@ env/
 # ------------------------------
 .pytest_cache/
 .coverage
+# Local automated verification suite
+/tests/
 
 # ------------------------------
 # VS Code

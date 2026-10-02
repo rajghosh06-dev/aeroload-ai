@@ -266,7 +266,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
             )
 
             # Clean edit form for an item
-            with st.expander("✏️ Edit or Remove an Item", expanded=False):
+            with st.expander("Edit or Remove an Item", expanded=False):
                 labels = [
                     f"{index + 1:02d} | {row['cargo_id']} - {row['name']} ({_to_float(row.get('weight_kg', 0.0)):.0f} kg, {row['hazard_class']})"
                     for index, row in enumerate(draft_rows)
@@ -353,7 +353,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
         r2_col2.number_input("CG maximum (aft limit, m)", step=0.1, format="%.2f", key="draft_cg_max_m",
                              help="Most aft allowable Center of Gravity position.")
 
-        with st.expander("ℹ️ Advanced Aircraft Information (Fixed Bay Topology)", expanded=False):
+        with st.expander("Advanced Aircraft Information (Fixed Bay Topology)", expanded=False):
             st.caption("Bay layout, longitudinal arms, and physical adjacency are determined by the ALT-8 airframe model.")
             bay_data = [
                 {"Bay": b.bay_id, "Row": b.row, "Side": b.side.value, "Arm (m)": b.longitudinal_arm_m,
@@ -425,7 +425,7 @@ def _scenario_data_editor(base_aircraft: Aircraft, sample_rows: list[dict[str, o
         for error in errors:
             st.error(error)
     elif draft_items:
-        st.success(f"✓ Scenario is valid: {len(draft_items)} items · {sum(item.weight_kg for item in draft_items):,.0f} kg payload.")
+        st.success(f"Scenario is valid: {len(draft_items)} items · {sum(item.weight_kg for item in draft_items):,.0f} kg payload.")
     else:
         st.info("Scenario draft is currently empty. Click 'Save changes' to confirm an empty manifest.")
 
@@ -473,7 +473,6 @@ def _assignment_frame(csp: AeroLoadCSP, assignment: dict[str, str]) -> pd.DataFr
 def run_dashboard() -> None:
     st.set_page_config(
         page_title="AeroLoad-AI — Aircraft Cargo Balance Engine",
-        page_icon="✈",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
@@ -628,9 +627,9 @@ def run_dashboard() -> None:
                 with st.container(border=True):
                     st.markdown("### Generate load plan")
                     if not all_errors and cargo_items:
-                        st.caption(":green[● Ready to generate a loading plan.]")
+                        st.caption(":green[Ready to generate a loading plan.]")
                     else:
-                        st.caption(":red[● Solver blocked — check constraints or add cargo.]")
+                        st.caption(":red[Solver blocked — check constraints or add cargo.]")
                     for error in config_errors:
                         st.error(error)
                     if not result_is_current and stored_result is not None:
@@ -962,11 +961,11 @@ def run_dashboard() -> None:
                         for bay in aircraft.bays:
                             opt = domain_analysis.bay_options[bay.bay_id]
                             if opt.status == BayOptionStatus.LEGAL:
-                                st.markdown(f"- :green[**{bay.bay_id}**] — ✓ **LEGAL**: {escape(opt.reason)}")
+                                st.markdown(f"- :green[**{bay.bay_id}**] — **LEGAL**: {escape(opt.reason)}")
                             elif opt.status == BayOptionStatus.ILLEGAL:
-                                st.markdown(f"- :red[**{bay.bay_id}**] — ✕ **BLOCKED**: {escape(opt.reason)}")
+                                st.markdown(f"- :red[**{bay.bay_id}**] — **BLOCKED**: {escape(opt.reason)}")
                             else:
-                                st.markdown(f"- :gray[**{bay.bay_id}**] — ● **OCCUPIED**: {escape(opt.reason)}")
+                                st.markdown(f"- :gray[**{bay.bay_id}**] — **OCCUPIED**: {escape(opt.reason)}")
                         st.caption("Cargo items are variables ($X$) and bays are domain values ($D$). Constraints prune unviable bays.")
 
                     # Plan status

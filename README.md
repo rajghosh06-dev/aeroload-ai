@@ -1,4 +1,4 @@
-# ✈️ AeroLoad-AI: Aircraft Cargo Weight-and-Balance & Hazmat Placement Engine
+# AeroLoad-AI: Aircraft Cargo Weight-and-Balance & Hazmat Placement Engine
 
 > **Academic Project**: B.Tech 3rd Year, 1st Semester — Artificial Intelligence Project-Based Learning (AI-PBL)  
 > **Curriculum Alignment**: Russell & Norvig, *Artificial Intelligence: A Modern Approach* (Units I, II, III)  
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 1. [Executive Summary & Problem Statement](#1-executive-summary--problem-statement)
 2. [Strict Academic Scope & Syllabus Alignment](#2-strict-academic-scope--syllabus-alignment)
 3. [System Architecture & Pipeline Flow](#3-system-architecture--pipeline-flow)
@@ -280,8 +280,8 @@ The user interface provides three distinct operational modes:
 - **Workflow**: Selecting any cargo item displays its live CSP domain:
   $$D(X_{\text{cargo}}) = \{ \text{candidate bays} \}$$
   The interactive cargo deck highlights:
-  - **`✓ LEGAL CHOICE`** (Sage Green): Bays that satisfy all unary and binary constraints.
-  - **`✕ INCOMPATIBLE`** (Red): Bays blocked with specific violation reasons (e.g., *"Adjacent to P2 (Lithium Battery) in B1"*).
+  - **`LEGAL CHOICE`** (Sage Green): Bays that satisfy all unary and binary constraints.
+  - **`INCOMPATIBLE`** (Red): Bays blocked with specific violation reasons (e.g., *"Adjacent to P2 (Lithium Battery) in B1"*).
   - **`OCCUPIED`** (Muted): Bays already assigned.
 
 ### 9.4 Dynamic Scenario Management
@@ -455,8 +455,8 @@ conda run -n aeroload python -m pytest -v
 3. Select cargo item `P2` (Lithium Batteries) and place it in bay `B1` (Forward Port).
 4. Select cargo item `P3` (Flammable Liquids).
 5. Inspect the cargo deck:
-   - Bays `B2` and `B3` are flagged in **Red** (`✕ INCOMPATIBLE`) with the reason: *"Adjacent to P2 (Lithium Battery) in B1"*.
-   - Bays `B7` and `B8` are highlighted in **Green** (`✓ LEGAL CHOICE`).
+   - Bays `B2` and `B3` are flagged in **Red** (`INCOMPATIBLE`) with the reason: *"Adjacent to P2 (Lithium Battery) in B1"*.
+   - Bays `B7` and `B8` are highlighted in **Green** (`LEGAL CHOICE`).
 
 ### Scenario C: Interactive Manual Planning & Constraint Violations (Manual Mode)
 1. Switch to **Manual Planning** mode.
